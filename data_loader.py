@@ -28,8 +28,8 @@ def triplane_dataloader(): # Storing triplane paths in a list
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     dataset = TriplaneDataset(triplane_paths, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True) # (batch_size, 3, 1, 128, 128)
-    return dataloader
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    return dataloader # Returns triplanes in the shape of (batch_size, 3, 1, 128, 128)
 
 class LatentDataset(Dataset):
     def __init__(self, latent_file_paths):
@@ -45,4 +45,4 @@ def latent_dataloader(): # Storing latent paths in a list
     latents = [f'{latent_dir}/{latents}' for latents in os.listdir(latent_dir)]
     dataset = LatentDataset(latents)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    return dataloader
+    return dataloader # Returns latents in the shape of (batch_size, 1, 64)

@@ -1,20 +1,8 @@
 import torch
 from torch import nn, optim
+import torch.nn.functional as F
 from data_loader import latent_dataloader
-from vae import *
 import os
-import numpy as np
-
-class LatentDiffusionModel(nn.Module):
-    def __init__(self, latent_dim=64):
-        super(LatentDiffusionModel, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(latent_dim, 512),
-            nn.ReLU(),
-            nn.Linear(512, latent_dim)
-        )
-    def forward(self, x):
-        return self.model(x)
 
 # TODO
 def some_refinement_function(model):
@@ -23,36 +11,122 @@ def some_refinement_function(model):
 # TODO
 def refine_model(coarse_model):
     # Implement refinement process using SDS or other techniques
-    # This might involve iterative optimization to improve the model
+    # This could be by using iterative optimization to improve the model
     refined_model = some_refinement_function(coarse_model)
     return refined_model
 
 # TODO
 # refined_model = refine_model(coarse_model)
 
-# Training the LDM
+class DoubleConv(nn.Module):
+    def __init__(self, in_channels, out_channels, cond_channels=0, multiplier=1):
+        super().__init__()
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(multiplier * in_channels + cond_channels, out_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.double_conv(x)
+
+class DownBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, cond_channels):
+        super().__init__()
+        self.down = nn.Sequential(
+            # nn.MaxPool2d(kernel_size=2, stride=2),
+            DoubleConv(in_channels, out_channels, cond_channels=cond_channels)
+        )
+        self.pooling = nn.AvgPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x, c):
+        _, _, w, h = x.size()
+        c = c.expand(-1, -1, w, h)  # Shape conditional input to match image
+        x = self.down(torch.cat([x,c], 1)) # Convolutions over image + condition
+        x_small = self.pooling(x)   # Downsample output for next block
+        return x, x_small
+
+class UpBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, bilinear=True):
+        super().__init__()
+        if bilinear: self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        else: self.upsample = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2) # Ask why?
+
+        self.up = nn.Sequential(
+            DoubleConv(in_channels, out_channels, multiplier=2)
+        )
+
+    def forward(self, x_big, x_small):
+        x_upsampled = self.upsample(x)
+        # input is CHW
+        diffY = x_big.size()[2] - x_upsampled.size()[2]
+        diffX = x_big.size()[3] - x_upsampled.size()[3]
+
+        x_upsampled = F.pad(x_upsampled, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2]) # concatenate along the channels axis
+        x = torch.cat([x_big, x_upsampled], dim=1)
+        return self.up(x)
+
+class LatentDiffusionModel(nn.Module):
+    def __init__(self, in_channels, out_channels, cond_channels, time_embed_dim, latent_dim, steps=1000):
+        super().__init__()
+        self.time_embedding = nn.Embedding(steps, time_embed_dim)
+        self.cond_projection = nn.Linear(cond_channels, latent_dim)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.inc = DoubleConv(in_channels, 64)
+        self.down1 = DownBlock(64, 128, latent_dim)
+        self.down2 = DownBlock(128, 256, latent_dim)
+        self.down3 = DownBlock(256, 512, latent_dim)
+        # self.down4 = DownBlock(512, 512, latent_dim)
+        self.bottleneck = DoubleConv(512 + latent_dim, 512)
+        # self.up1 = UpBlock(1024, 256)
+        self.up1 = UpBlock(512, 256)
+        self.up2 = UpBlock(256, 128)
+        self.up3 = UpBlock(128, 64)
+        self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
+
+    def forward(self, x, t, cond):
+        b, c, h, w = x.shape
+        timestep = self.time_embedding(t).view(b, -1, 1, 1)
+        cond = self.cond_projection(cond).view(b, -1, 1, 1)
+        cond = torch.cat([timestep, cond], dim=1)
+        x1 = self.inc(x)
+        x2, x1_small = self.down1(x1, cond)
+        x3, x2_small = self.down2(x2, cond)
+        x4, x3_small = self.down3(x3, cond)
+        x_bottleneck = self.bottleneck(torch.cat([x4, cond.expand_as(x4)], dim=1))
+        x = self.up1(x3_small, x_bottleneck)
+        x = self.up2(x2_small, x)
+        x = self.up3(x1_small, x)
+        logits = self.outc(x)
+        return logits
+
 def train_ldm():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     latent_dim = 64
+    ldm = LatentDiffusionModel(in_channels=1, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=1).to(device)
+    optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
+    ldm.train()
     latent_data = latent_dataloader()
-    ldm = LatentDiffusionModel(latent_dim).to(device)
-    optimizer = optim.Adam(ldm.parameters(), lr=1e-3)
+    num_epochs = 20
     checkpoint_dir = './ldm_checkpoints'
     os.makedirs(checkpoint_dir, exist_ok=True)
     # Training loop
-    num_epochs = 100
     for epoch in range(1, num_epochs+1):
         epoch_loss = 0
-        for latents in latent_data:
-            latents = latents.to(device)
+        for latent in latent_data:
+            batch_size, features, height, width = latent.size()
+            latent = latent.view(batch_size, features, height, width).to(device)
+            timesteps = torch.randint(0, 1000, (batch_size,), device=device)
+            cond = torch.randn(batch_size, 32, device=device)
             optimizer.zero_grad()
-            output = ldm(latents)
-            loss = nn.MSELoss()(output, latents)
+            outputs = ldm(latent, timesteps, cond)
+            loss = F.mse_loss(outputs, latent)  # Example loss function
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-        print(f'Epoch {epoch}, Loss: {epoch_loss / len(latent_data)}')
-        # Save checkpoint every 10 epochs
+        print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss/len(latent_data)}')
         if epoch % 10 == 0:
             checkpoint_path = f'{checkpoint_dir}/ldm_epoch_{epoch}.pth'
             torch.save({
@@ -69,4 +143,4 @@ def load_checkpoint(model, optimizer, path):
     return model, optimizer, epoch
 
 # Training the ldm
-# train_ldm()
+# train_ldm() # Uncomment during training
