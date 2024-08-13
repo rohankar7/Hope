@@ -140,6 +140,7 @@ def save_latent_representation(dataloader, vae, output_dir):
                 # latent_path = os.path.join(output_dir, f'latent_{i * batch_size * num_planes + j}.pt')
                 # TODO: Maintain industry standards and replace the loc below
                 latent_path = os.path.join(output_dir, f'latent_{i}.pt')
+                # print(latent_representation.shape) # Shape: torch.Size([3, 64])
                 torch.save(latent_representation[j].cpu(), latent_path)
 
 def main():
