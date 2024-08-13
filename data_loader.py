@@ -45,4 +45,4 @@ def latent_dataloader(): # Storing latent paths in a list
     latents = [f'{latent_dir}/{latents}' for latents in os.listdir(latent_dir)]
     dataset = LatentDataset(latents)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    return dataloader # Returns latents in the shape of (batch_size, 1, 64)
+    return dataloader # Returns latents in the shape of (batch_size, 3, 1, 32, 32)
