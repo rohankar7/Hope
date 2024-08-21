@@ -1,42 +1,42 @@
-import torch
-from torch import nn, optim
-import torch.nn.functional as F
-from data_loader import latent_dataloader
-import os
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import matplotlib.pyplot as plt
+# import torch
+# from torch import nn, optim
+# import torch.nn.functional as F
+# from data_loader import latent_dataloader
+# import os
+# from torch.optim.lr_scheduler import ReduceLROnPlateau
+# import matplotlib.pyplot as plt
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-# Define the device
+# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# # Define the device
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
+# import torch
+# import torch.nn as nn
+# import torch.optim as optim
 
-class LatentDiffusionModel(nn.Module):
-    def __init__(self, latent_dim=64):
-        super(LatentDiffusionModel, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(latent_dim, 512),
-            nn.ReLU(),
-            nn.Linear(512, latent_dim)
-        )
+# class LatentDiffusionModel(nn.Module):
+#     def __init__(self, latent_dim=64):
+#         super(LatentDiffusionModel, self).__init__()
+#         self.model = nn.Sequential(
+#             nn.Linear(latent_dim, 512),
+#             nn.ReLU(),
+#             nn.Linear(512, latent_dim)
+#         )
         
-    def forward(self, x):
-        return self.model(x)
+#     def forward(self, x):
+#         return self.model(x)
 
-# Instantiate the model and move it to the device
-latent_dim = 64
-ldm = LatentDiffusionModel(latent_dim).to(device)
-optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
+# # Instantiate the model and move it to the device
+# latent_dim = 64
+# ldm = LatentDiffusionModel(latent_dim).to(device)
+# optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
 
-# Function to save a checkpoint
-def save_checkpoint(model, optimizer, epoch, path):
-    torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict()
-    }, path)
+# # Function to save a checkpoint
+# def save_checkpoint(model, optimizer, epoch, path):
+#     torch.save({
+#         'epoch': epoch,
+#         'model_state_dict': model.state_dict(),
+#         'optimizer_state_dict': optimizer.state_dict()
+#     }, path)
 
 # # Training loop
 # num_epochs = 100
