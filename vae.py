@@ -8,14 +8,15 @@ import matplotlib.pyplot as plt
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 triplane_data = triplane_dataloader()
+latent_dimension = 32
 
 class VAE(nn.Module):
-    def __init__(self, latent_dim=64):
+    def __init__(self, latent_dim=latent_dimension):
         super().__init__()
         # Encoder
         feature_dim = 256 * 8 * 8
         # feature_dim = 4 * 2 * 2
-        num_channels = 1
+        num_channels = 3
         self.encoder_conv = nn.Sequential(
             nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(32),
@@ -81,8 +82,8 @@ def tv_loss(x):
     batch_size = x.size(0)
     h_x = x.size(2)
     w_x = x.size(3)
-    count_h = (x.size(2) - 1) * x.size(3)
-    count_w = x.size(2) * (x.size(3) - 1)
+    count_h = (h_x - 1) * w_x
+    count_w = h_x * (w_x - 1)
     h_tv = torch.pow((x[:, :, 1:, :] - x[:, :, :-1, :]), 2).sum()
     w_tv = torch.pow((x[:, :, :, 1:] - x[:, :, :, :-1]), 2).sum()
     return (h_tv / count_h + w_tv / count_w) / batch_size
@@ -94,21 +95,20 @@ def vae_loss(recon_x, x, mu, logvar, beta=2e-3):
     return BCE + KLD + beta * TV
 
 def train_vae(ae=None):
-    latent_dim = 64
     save_path = './vae_weights'
     os.makedirs(save_path, exist_ok=True)
-    vae = VAE(latent_dim).to(device) if ae==None else ae
+    vae = VAE(latent_dimension).to(device) if ae==None else ae
     # optimizer = optim.Adam(vae.parameters(), lr=1e-4, weight_decay=1e-5)
     optimizer = optim.Adam(vae.parameters(), lr=1e-4)
-    # scheduler = ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5)
     num_epochs = 100
 
     for epoch in range(num_epochs):
         epoch_loss = 0
         for triplanes in triplane_data:
             triplanes = triplanes.to(device)
-            batch_size, num_planes, channels, height, width = triplanes.size()
-            triplanes = triplanes.view(batch_size * num_planes, channels, height, width)
+            batch_size, num_planes, height, width, channels = triplanes.size()
+            triplanes = triplanes.view(batch_size * num_planes, height, width, channels)
             optimizer.zero_grad()
             recon_batch, mu, logvar = vae(triplanes)
             loss = vae_loss(recon_batch, triplanes, mu, logvar)
@@ -118,7 +118,7 @@ def train_vae(ae=None):
             epoch_loss += loss.item()
         
         print(f'Epoch {epoch}, Loss: {epoch_loss / len(triplane_data)}')
-        # scheduler.step(epoch_loss / len(triplane_data))
+        scheduler.step(epoch_loss / len(triplane_data))
         # Save model weights
     torch.save(vae.state_dict(), f'{save_path}/weights.pth')
 
@@ -129,10 +129,9 @@ def save_latent_representation(dataloader, vae, output_dir):
     with torch.no_grad():
         for i, triplanes in enumerate(dataloader):
             triplanes = triplanes.to(device)  # Move data to the appropriate device
-            batch_size, num_planes, channels, height, width = triplanes.size()
-            
-            # Reshape triplanes to (batch_size * num_planes, channels, height, width)
-            triplanes = triplanes.view(batch_size * num_planes, channels, height, width)
+            batch_size, num_planes, height, width, channels = triplanes.size()
+            # Reshape triplanes to (batch_size * num_planes, height, width, channels)
+            triplanes = triplanes.view(batch_size * num_planes, height, width, channels)
             mu, logvar = vae.encode(triplanes)
             latent_representation = vae.reparameterize(mu, logvar)            
             # Save each latent representation in the batch
@@ -140,17 +139,17 @@ def save_latent_representation(dataloader, vae, output_dir):
                 # latent_path = os.path.join(output_dir, f'latent_{i * batch_size * num_planes + j}.pt')
                 # TODO: Maintain industry standards and replace the loc below
                 latent_path = os.path.join(output_dir, f'latent_{i}.pt')
-                # print(latent_representation.shape) # Shape: torch.Size([3, 64])
+                print('Shape', latent_representation.shape) # Shape: torch.Size([3, 64])
                 torch.save(latent_representation[j].cpu(), latent_path)
 
 def main():
     latent_output_dir = './latents'
-    vae = VAE(latent_dim=64).to(device)
+    vae = VAE(latent_dim=latent_dimension).to(device)
     # Training the vae
     train_vae()
     # Save latent representations
-    # vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
     save_latent_representation(triplane_data, vae, latent_output_dir)
+    # vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
 
 if __name__ == '__main__':
     main()

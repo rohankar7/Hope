@@ -20,12 +20,9 @@
 # Create a Denoising U-net
 # Include Self-Attention blocks
 
-# TODO:
-# Apply for extension
-
 # QUESTIONS:------------------------------------------------------------
 # How to improve the VAE loss when it stops around 35000
 # How to reshape the latents to a proper .obj model similar to the original model
 # How convert the text descriptions of the 3D models to text embeddings and then convert those embeddings to the same latent space used to train the diffusion model
 # Should we train the diffusion model on the latent triplane data or also on the data of the latent text embeddings
-# How to extract features like colour and density from the .obj files
+# How to extract features like density from the .obj files

@@ -9,7 +9,8 @@ from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
 # from ldm import LatentDiffusionModel
 from model import LatentDiffusionModel
 from vae import *
-from ShapeNetCore import *
+from file_address import *
+from triplane import triplane_resolution
 
 # Additional file formats
 # mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=(rgb_final * 255).astype(np.uint8))
@@ -52,9 +53,10 @@ def fill_voxel_grid(xy_projection, yz_projection, zx_projection, resolution):
     return voxel_grid
 
 def extract_colors(triplane, vertices, faces, resolution):
-    xy_projection, yz_projection, zx_projection = triplane
-    vertex_colors = np.zeros((vertices.shape[0], 3), dtype=np.uint8)
-    face_colors = np.zeros((faces.shape[0], 3), dtype=np.uint8)
+    xy_projection, yz_projection, zx_projection = triplane[..., :3]
+    dtype = np.int64
+    vertex_colors = np.zeros((vertices.shape[0], 3), dtype=dtype)
+    face_colors = np.zeros((faces.shape[0], 3), dtype=dtype)
     # Extract color for the vertices
     for i, (x, y, z) in enumerate(vertices):
         x, y, z = int(x), int(y), int(z)
@@ -65,13 +67,16 @@ def extract_colors(triplane, vertices, faces, resolution):
         # Average the colors from the three planes
         vertex_colors[i] = np.mean([xy_color, yz_color, zx_color], axis=0) * 255
     # Extract face colors
-    print(vertex_colors.shape)
     for i, face in enumerate(faces):
         face_colors[i] = np.mean(vertex_colors[face], axis=0) * 255
     return vertex_colors, face_colors
 
-def generate_mesh(triplane, resolution):
-    xy_projection, yz_projection, zx_projection_rotated = triplane[0][:, :, 0], triplane[1][:, :, 0], triplane[2][:, :, 0]
+def generate_mesh(triplane, zx_projection, resolution=triplane_resolution):
+    xy_projection = triplane[0][:, :, 0] * triplane[0][:, :, 3]
+    yz_projection = triplane[1][:, :, 0] * triplane[1][:, :, 3]
+    # xy_projection = triplane[0][:, :, -1]
+    # yz_projection = triplane[1][:, :, -1]
+    zx_projection_rotated = zx_projection
     # Clean the projections
     xy_projection = clean_projection(xy_projection, 'closing', 2)
     yz_projection = clean_projection(yz_projection, 'closing', 2)
@@ -86,10 +91,9 @@ def generate_mesh(triplane, resolution):
     if max_value == min_value:
         raise RuntimeError('The voxel grid is empty or uniform after smoothing.')
     verts, faces, normals, values = measure.marching_cubes(voxel_grid_smoothed, level=threshold)
-    # faces = np.rot90(faces, k=-2)
     vertex_colors, face_colors = extract_colors(triplane, verts, faces, resolution)
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, vertex_normals=normals, vertex_attributes={'values':values}, vertex_colors=vertex_colors, face_colors=face_colors)
-    # mesh.show()
+    mesh.show()
     return mesh
 
 def repair_mesh(mesh):
@@ -101,28 +105,38 @@ def repair_mesh(mesh):
     mesh.update_faces(mesh.unique_faces())  # Remove duplicate vertices
     return mesh
 
+def correct_rotation(triplane, resolution):
+    zx_projection_rotated = triplane[2][:, :, 0] * triplane[2][:, :, 3]
+    # zx_projection_rotated = triplane[2][:, :, -1]
+    try:
+        mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
+        print('Error 1')
+        return mesh
+    except RuntimeError as e:
+        try:
+            zx_projection_rotated = np.rot90(zx_projection_rotated, k=2)
+            mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
+            print('Error 2')
+            return mesh
+        except RuntimeError as e:
+            try:
+                zx_projection_rotated = np.rot90(zx_projection_rotated, k=-1)
+                mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
+                print('Error 3')
+                return mesh
+            except RuntimeError as e:
+                print("No surface found at the given iso value")
+    return
+
 def model_from_triplanes(output_dir, resolution):
     for np_triplane in os.listdir(output_dir):
         triplane = np.load(os.path.join(output_dir, np_triplane))
-        try:
-            mesh = generate_mesh(triplane, resolution)
-        except RuntimeError as e:
-            try:
-                zx_projection_rotated = np.rot90(zx_projection_rotated, k=2)
-                zx_projection_rotated = clean_projection(zx_projection_rotated, 'closing', 2)
-                mesh = generate_mesh(triplane, resolution)
-            except RuntimeError as e:
-                try:
-                    zx_projection_rotated = np.rot90(zx_projection_rotated, k=-1)
-                    zx_projection_rotated = clean_projection(zx_projection_rotated, 'closing', 2)
-                    mesh = generate_mesh(triplane, resolution)
-                except RuntimeError as e:
-                    print("No surface found at the given iso value")
+        mesh = correct_rotation(triplane, resolution)
         mesh = repair_mesh(mesh) # Mesh repairs
         model_gen_dir = './generated_models'
         os.makedirs(model_gen_dir, exist_ok=True)
-        mesh.export(f"{model_gen_dir}/{np_triplane.split('.')[0]}_rotated.ply")
-        print('Exported')
+        mesh.export(f"{model_gen_dir}/{np_triplane.split('.')[0]}.ply")
+        # print('Exported')
 
 def main():
     # Instantiate the model and optimizer
@@ -148,7 +162,7 @@ def main():
     # # latent_triplanes = ldm(latent_vectors)
     # decoded_triplanes = vae.decode(latent_triplanes)
     # print('Shape', decoded_triplanes.shape)
-    model_from_triplanes('./images', resolution=256)
+    model_from_triplanes('./images', resolution=triplane_resolution)
 
 if __name__ == "__main__":
     main()

@@ -118,14 +118,14 @@ class LatentDiffusionModel(nn.Module):
     def forward(self, x, t, cond):
         b, c, h, w = x.shape
         print(x.shape, t.shape, cond.shape)
-        # timestep = self.time_embedding(t)
-        # timestep = timestep.view(timestep.size(0), timestep.size(1)).unsqueeze(2).unsqueeze(3)
-        # # print(timestep.shape)
-        # cond = self.cond_projection(cond)
-        # cond = cond.view(cond.size(0), cond.size(1)).unsqueeze(2).unsqueeze(3)
+        timestep = self.time_embedding(t)
+        timestep = timestep.view(timestep.size(0), timestep.size(1)).unsqueeze(2).unsqueeze(3)
+        # print(timestep.shape)
+        cond = self.cond_projection(cond)
+        cond = cond.view(cond.size(0), cond.size(1)).unsqueeze(2).unsqueeze(3)
         # print(cond.shape)
         timestep = self.time_embedding(t).view(b, -1, 1, 1)
-        print('Timestep', timestep.shape)
+        # print('Timestep', timestep.shape)
         timestep = timestep.expand(b, timestep.size(1), h, w)  # Expand timestep to match cond's spatial dimensions
         cond = self.cond_projection(cond).view(b, -1, 1, 1)
         cond = cond.expand(b, cond.size(1), h, w)  # Expand cond to match spatial dimensions
