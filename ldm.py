@@ -81,7 +81,8 @@ class UpBlock(nn.Module):
         super().__init__()
         # if bilinear: self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         # else: self.upsample = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2) # Ask why?
-        self.upsample = nn.Upsample(scale_factor=2)
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        # self.upsample = nn.Upsample(scale_factor=2)
         self.up = nn.Sequential(
             DoubleConv(in_channels, out_channels, multiplier=2)
         )
@@ -146,11 +147,11 @@ class LatentDiffusionModel(nn.Module):
 def train_ldm():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     latent_dim = 32
-    ldm = LatentDiffusionModel(in_channels=1, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=1).to(device)
+    ldm = LatentDiffusionModel(in_channels=4, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=4).to(device)
     optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
     ldm.train()
     latent_data = latent_dataloader()
-    num_epochs = 20
+    num_epochs = 100
     timesteps = 1000
     scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
     checkpoint_dir = './ldm_checkpoints'
@@ -166,6 +167,8 @@ def train_ldm():
             noisy_data, noise = scheduler.add_noise(latent, timesteps)
             optimizer.zero_grad()
             outputs = ldm(noisy_data, timesteps, cond)
+            # Upsample noise to match the output size
+            # noise = F.interpolate(noise, size=(128, 128), mode='bilinear', align_corners=False)
             loss = F.mse_loss(outputs, noise)  # Loss between predicted noise and actual noise
             loss.backward()
             optimizer.step()
@@ -186,5 +189,9 @@ def load_checkpoint(model, optimizer, path):
     epoch = checkpoint['epoch']
     return model, optimizer, epoch
 
-# Training the ldm
-train_ldm() # Uncomment during training
+def main():
+    # Training the ldm
+    train_ldm() # Uncomment during training
+
+if __name__ == '__main__':
+    main()

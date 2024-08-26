@@ -7,9 +7,9 @@ from skimage import measure
 from skimage.morphology import binary_closing, binary_opening, disk
 from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
 # from ldm import LatentDiffusionModel
-from model import LatentDiffusionModel
+from ldm3 import LatentDiffusionModel
 from vae import *
-from file_address import *
+from ShapeNetCore import *
 from triplane import triplane_resolution
 
 # Additional file formats

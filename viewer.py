@@ -1,5 +1,5 @@
 import os
-from file_address import *
+from ShapeNetCore import *
 import trimesh
 import numpy as np
 # file_path = 'C:/ShapeNetCore/02691156/10155655850468db78d106ce0a280f87/models/model_normalized.obj'
