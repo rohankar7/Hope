@@ -3,3 +3,4 @@ vae_weights/
 ldm_checkpoints
 latents/
 images/
+.env

@@ -3,7 +3,7 @@ import trimesh
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from skimage.draw import polygon
-from file_address import *
+from ShapeNetCore import *
 import os
 
 triplane_resolution = 128
@@ -36,7 +36,7 @@ def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolut
     sdf_xy = trimesh.proximity.signed_distance(mesh, xy_points).reshape((resolution, resolution))
     sdf_yz = trimesh.proximity.signed_distance(mesh, yz_points).reshape((resolution, resolution))
     sdf_zx = trimesh.proximity.signed_distance(mesh, zx_points).reshape((resolution, resolution))
-    sdf_values = np.stack([sdf_xy, sdf_yz, sdf_zx], axis=0)
+    sdf_values = np.stack([sdf_xy, sdf_yz, sdf_zx], axis=0, dtype=dtype)
     return sdf_values
 
 def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
@@ -92,8 +92,8 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     mesh = trimesh.load(file_path, force='mesh')
     mesh.visual = mesh.visual.to_color()
     # Stacking the SDF values for each projection
-    # sdf_grid = compute_sdf(mesh)
-    # sdf_reshaped = sdf_grid[:, :, :, np.newaxis]
+    sdf_grid = compute_sdf(mesh)
+    sdf_reshaped = sdf_grid[:, :, :, np.newaxis]
     # Generate binary projections
     xy_projection = project_to_plane(mesh, 'xy', resolution)
     yz_projection = project_to_plane(mesh, 'yz', resolution)
@@ -102,11 +102,11 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     viz_projections(xy_projection, yz_projection, zx_projection_rotated)    # Visualize the projection
     # Stacking the projections to create a triplane
     triplane = np.stack([xy_projection, yz_projection, zx_projection_rotated], axis=0)
-    # triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
+    triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
     return triplane
 
 def model_to_triplanes(out_dir, resolution=triplane_resolution):
-    for path in subclasses_list[:5]:
+    for path in random_models:
         os.makedirs(out_dir, exist_ok=True)
         triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution)
         # print(triplane.shape) # 3 x N x N x 3
