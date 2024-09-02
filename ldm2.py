@@ -41,30 +41,34 @@ class UpBlock(nn.Module):
         return self.conv(x)
 
 class LatentDiffusionModel(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1):
+    def __init__(self, in_channels=4, out_channels=4):
         super(LatentDiffusionModel, self).__init__()
 
         self.inc = DoubleConv(in_channels, 64)
         self.down1 = DownBlock(64, 128)
         self.down2 = DownBlock(128, 256)
-        self.down3 = DownBlock(256, 512)
-        self.down4 = DownBlock(512, 1024)
-        self.up1 = UpBlock(1024 + 512, 512)  # Adjust input channels after concatenation
-        self.up2 = UpBlock(512 + 256, 256)  # Adjust input channels after concatenation
-        self.up3 = UpBlock(256 + 128, 128)  # Adjust input channels after concatenation
-        self.up4 = UpBlock(128 + 64, 64)    # Adjust input channels after concatenation
+        # self.down3 = DownBlock(256, 512)
+        # self.down4 = DownBlock(512, 1024)
+        # self.up1 = UpBlock(1024 + 512, 512)  # Adjust input channels after concatenation
+        # self.up2 = UpBlock(512 + 256, 256)  # Adjust input channels after concatenation
+        # self.up3 = UpBlock(256 + 128, 128)  # Adjust input channels after concatenation
+        # self.up4 = UpBlock(128 + 64, 64)    # Adjust input channels after concatenation
+        # self.up1 = UpBlock(256, 128)
+        self.up2 = UpBlock(128, 64)
         self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
 
     def forward(self, x):
         x1 = self.inc(x)
         x2, x1_out = self.down1(x1)
         x3, x2_out = self.down2(x2)
-        x4, x3_out = self.down3(x3)
-        x5, x4_out = self.down4(x4)
-        x = self.up1(x5, x4_out)
-        x = self.up2(x, x3_out)
-        x = self.up3(x, x2_out)
-        x = self.up4(x, x1_out)
+        # x4, x3_out = self.down3(x3)
+        # x5, x4_out = self.down4(x4)
+        # x = self.up1(x5, x4_out)
+        # x = self.up2(x, x3_out)
+        # x = self.up1(x3, x2_out)
+        x = self.up2(x, x1_out)
+        # x = self.up3(x, x2_out)
+        # x = self.up4(x, x1_out)
         return self.outc(x)
 
 class NoiseScheduler:
@@ -120,7 +124,7 @@ def train_latent_diffusion_model():
             optimizer.zero_grad()
             outputs = model(noisy_data) # Change
             # Upsample noise to match the output size
-            # noise = F.interpolate(noise, size=(128, 128), mode='bilinear', align_corners=False)
+            noise = F.interpolate(noise, size=(128, 128), mode='bilinear', align_corners=False)
             loss = F.mse_loss(outputs, noise)  # Loss between predicted noise and actual noise
             loss.backward()
             optimizer.step()

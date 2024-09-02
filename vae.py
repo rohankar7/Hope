@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 triplane_data = triplane_dataloader()
 latent_dimension = 32
-mean_split = 2
-logvar_split = 2
+mean_logvar_split = 3
+# logvar_split = 2
 num_channels = 4
 
 class VAE(nn.Module):
@@ -32,7 +32,7 @@ class VAE(nn.Module):
         )
         # Decoder
         self.decoder_conv = nn.Sequential(
-            nn.ConvTranspose2d(2, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(mean_logvar_split, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.BatchNorm2d(16),
             # nn.ReLU(),
             nn.LeakyReLU(),
@@ -43,8 +43,8 @@ class VAE(nn.Module):
     
     def encode(self, x):
         x = self.encoder_conv(x)
-        mu = x[:, :2, :, :]  # first 2 channels for mean
-        logvar = x[:, 2:, :, :]  # last 2 channels for logvar
+        mu = x[:, :mean_logvar_split, :, :]  # first 2 channels for mean
+        logvar = x[:, mean_logvar_split:, :, :]  # last 2 channels for logvar
         return mu, logvar
         # return x.view(-1, 3, 32, 32, 3)
     
@@ -54,8 +54,7 @@ class VAE(nn.Module):
         return mu + eps * std
     
     def decode(self, z):
-        z = self.decoder_conv(z)
-        return z
+        return self.decoder_conv(z)
     
     def forward(self, x):
         mu, logvar = self.encode(x)
@@ -107,6 +106,21 @@ def train_vae(ae=None):
         # Save model weights
     torch.save(vae.state_dict(), f'{save_path}/weights.pth')
 
+def viz_projections(xy_projection, yz_projection, zx_projection):
+    # Visualizing projections
+    cmap = 'viridis'   # Choosing 'gray' or 'viridis'
+    plt.figure(figsize=(15, 5))
+    plt.subplot(1, 3, 1)
+    plt.title('XY Projection')
+    plt.imshow(xy_projection, cmap=cmap)
+    plt.subplot(1, 3, 2)
+    plt.title('YZ Projection')
+    plt.imshow(yz_projection, cmap=cmap)
+    plt.subplot(1, 3, 3)
+    plt.title('ZX Projection')
+    plt.imshow(zx_projection, cmap=cmap)
+    plt.show() 
+
 def save_latent_representation(dataloader, vae, output_dir):
     vae.eval()  # Set the VAE to evaluation mode
     os.makedirs(output_dir, exist_ok=True)
@@ -118,18 +132,17 @@ def save_latent_representation(dataloader, vae, output_dir):
             triplanes = triplanes.permute(0, 1, 4, 2, 3).contiguous().view(-1, num_channels, 128, 128)
             mu, logvar = vae.encode(triplanes)
             latent_representation = torch.cat([mu, logvar], dim=1)
-            # print('Latent:', latent_representation.shape)
             latent_path = os.path.join(output_dir, f'latent_{i}.pt')
             torch.save(latent_representation.cpu(), latent_path)    # latent shape: batch_size * num_planes(3) x num_features(4) x height(32) x width(32)
+            latent_representation = latent_representation[:, :3, :, :].permute(0, 2, 3, 1).contiguous().cpu().detach().numpy()
+            viz_projections(latent_representation[0], latent_representation[1], latent_representation[2])
 
 def main():
-    latent_output_dir = './latents'
-    vae = VAE().to(device)
-    # Training the vae
-    train_vae()
-    # Save latent representations
-    save_latent_representation(triplane_data, vae, latent_output_dir)
-    # vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
+    print('Main function: VAE')
+    # latent_output_dir = './latents'
+    # vae = VAE().to(device)
+    # train_vae()
+    # save_latent_representation(triplane_data, vae, latent_output_dir)   # Saving the latent representations
 
 if __name__ == '__main__':
     main()

@@ -15,7 +15,7 @@
 
 # class LatentDiffusionModel(nn.Module):
 #     def __init__(self, latent_dim=64):
-#         super(LatentDiffusionModel, self).__init__()
+#         super().__init__()
 #         self.model = nn.Sequential(
 #             nn.Linear(latent_dim, 512),
 #             nn.ReLU(),

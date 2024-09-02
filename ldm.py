@@ -118,21 +118,18 @@ class LatentDiffusionModel(nn.Module):
 
     def forward(self, x, t, cond):
         b, c, h, w = x.shape
-        print(x.shape, t.shape, cond.shape)
+        print(t.shape)
         timestep = self.time_embedding(t)
+        print(timestep.shape)
         timestep = timestep.view(timestep.size(0), timestep.size(1)).unsqueeze(2).unsqueeze(3)
-        # print(timestep.shape)
+        print(cond.shape)
         cond = self.cond_projection(cond)
         cond = cond.view(cond.size(0), cond.size(1)).unsqueeze(2).unsqueeze(3)
-        # print(cond.shape)
         timestep = self.time_embedding(t).view(b, -1, 1, 1)
-        # print('Timestep', timestep.shape)
         timestep = timestep.expand(b, timestep.size(1), h, w)  # Expand timestep to match cond's spatial dimensions
         cond = self.cond_projection(cond).view(b, -1, 1, 1)
         cond = cond.expand(b, cond.size(1), h, w)  # Expand cond to match spatial dimensions
         cond = torch.cat([timestep, cond], dim=1)
-        # cond = torch.cat([timestep, cond], dim=1)
-        # cond = torch.cat([timestep, cond], dim=1)
         x1 = self.inc(x)
         x2, x1_small = self.down1(x1, cond)
         x3, x2_small = self.down2(x2, cond)
@@ -165,6 +162,9 @@ def train_ldm():
             timesteps = torch.randint(0, scheduler.timesteps, (batch_size * planes,), device=device)
             cond = torch.randn(batch_size * planes, 32, device=device)
             noisy_data, noise = scheduler.add_noise(latent, timesteps)
+            print(noisy_data.shape)
+            print(timesteps.shape)
+            print(cond.shape)
             optimizer.zero_grad()
             outputs = ldm(noisy_data, timesteps, cond)
             # Upsample noise to match the output size
