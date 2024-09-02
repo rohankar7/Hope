@@ -38,7 +38,7 @@ scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
 
 class SimpleLatentDiffusionModel(nn.Module):
     def __init__(self, feature_channels=4, target_height=128, target_width=128):
-        super(SimpleLatentDiffusionModel, self).__init__()
+        super().__init__()
         # We will create a model that simply upscales the input.
         self.upsample1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)  # 32 -> 64
         self.conv1 = nn.Conv2d(feature_channels, feature_channels, kernel_size=3, padding=1)
@@ -107,4 +107,4 @@ def load_checkpoint(model, optimizer, path):
 
 # Example usage
 
-train_simple_latent_diffusion_model(scheduler)
+# train_simple_latent_diffusion_model(scheduler)

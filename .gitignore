@@ -3,4 +3,5 @@ vae_weights/
 ldm_checkpoints
 latents/
 images/
+generated_models/
 .env
