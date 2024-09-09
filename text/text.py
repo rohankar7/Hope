@@ -28,4 +28,4 @@ print(len(ShapeNetCoreDescriptions['Subclass']))
 print(len(ShapeNetCoreDescriptions['Description']))
 
 df = pd.DataFrame(ShapeNetCoreDescriptions)
-df.to_csv("./descriptions.csv", index=False)
+df.to_csv("./text/descriptions.csv", index=False)

@@ -7,7 +7,7 @@ import os
 from skimage import measure
 from skimage.morphology import binary_closing, binary_opening, disk
 from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
-from g import UNetWithCrossAttention
+from ganesha import UNetWithCrossAttention
 from vae import VAE
 from ShapeNetCore import *
 from triplane import triplane_resolution
