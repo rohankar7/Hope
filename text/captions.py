@@ -1,7 +1,9 @@
 import pandas as pd
 import os
 from dotenv import load_dotenv, dotenv_values
-from ShapeNetCore import *
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from Model_List import model_paths
 from openai import OpenAI
 
 load_dotenv()
@@ -22,13 +24,13 @@ def get_prompt(text):
 ShapeNetCoreDescriptions = {
     'Class': [],
     'Subclass': [],
-    'Caption': []
+    'Caption': [],
 }
-output_file_path = './captions.csv'
-df = pd.read_csv('./descriptions.csv')
+output_file_path = './text/all_captions.csv'
+df = pd.read_csv('./text/descriptions.csv')
 
-for path in random_models:
-    c,s = path.split('/')
+for path in model_paths:
+    c,s = path.split('/')[2:4]
     description = df[(df['Class']==int(c[1:])) & (df['Subclass']==s)]['Description'].iloc[0]
     ShapeNetCoreDescriptions['Class'].append(str(c))
     ShapeNetCoreDescriptions['Subclass'].append(str(s))

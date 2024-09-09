@@ -108,17 +108,18 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     yz_projection = project_to_plane(mesh, 'yz', resolution)
     zx_projection = project_to_plane(mesh, 'zx', resolution)
     zx_projection = np.rot90(zx_projection, k=-1)
-    viz_projections(xy_projection, yz_projection, zx_projection)    # Visualize the projection
+    # viz_projections(xy_projection, yz_projection, zx_projection)    # Visualize the projection
     # Stacking the projections to create a triplane
     triplane = np.stack([xy_projection, yz_projection, zx_projection], axis=0)
     # triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
     return triplane
 
 def model_to_triplanes(out_dir, resolution=triplane_resolution):
-    for path in random_models[:2]:
+    for path in get_random_models()[:1]:
         os.makedirs(out_dir, exist_ok=True)
         try:
             triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution)
+            print(triplane.shape)
             # print(triplane.shape) # 3 x N x N x 3
             np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
             print('Done')

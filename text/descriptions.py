@@ -4,7 +4,8 @@ import os
 from PIL import Image
 import csv
 
-llava_model = "llava-hf/llava-interleave-qwen-0.5b-hf"
+# llava_model = "llava-hf/llava-interleave-qwen-0.5b-hf"
+llava_model = "bczhou/TinyLLaVA-3.1B"
 processor = AutoProcessor.from_pretrained(llava_model)
 device = ('cuda:0' if torch.cuda.is_available() else 'cpu')
 model = AutoModelForPreTraining.from_pretrained(llava_model).to(device)
@@ -25,7 +26,7 @@ def extract_images_of_models(folder_path, output_dir):
                     torch.cuda.empty_cache()  # Clear the cache
                     # Prepare image and text prompt
                     image = Image.open(image_path).convert('RGB')
-                    prompt = f"user<image>Describe the features of the focussed object in the image?assistant:"
+                    prompt = f"user<image>Describe the features of the focussed object in the image.assistant:"
                     inputs = processor(prompt, image, return_tensors="pt").to(device)
                     torch.cuda.empty_cache()  # Clear the cache before generating output
                     output = model.generate(**inputs, max_new_tokens=100)
@@ -34,5 +35,5 @@ def extract_images_of_models(folder_path, output_dir):
                 torch.cuda.empty_cache()
 
 images_pwd = 'C:/Project/GPTImages'
-output_dir = './descriptions.csv'
+output_dir = './text/descriptions.csv'
 images = extract_images_of_models(images_pwd, output_dir)

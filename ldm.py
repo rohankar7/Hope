@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
-from data_loader import latent_dataloader
+from data_loader import latent_dataloader, triplane_dataloader
 import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -147,7 +147,8 @@ def train_ldm():
     ldm = LatentDiffusionModel(in_channels=4, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=4).to(device)
     optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
     ldm.train()
-    latent_data = latent_dataloader()
+    # latent_data = latent_dataloader()
+    latent_data = triplane_dataloader()
     num_epochs = 100
     timesteps = 1000
     scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
@@ -158,11 +159,11 @@ def train_ldm():
         epoch_loss = 0
         for latent in latent_data:
             batch_size, planes, features, height, width = latent.size()
-            latent = latent.view(batch_size * planes, features, height, width).to(device)
-            timesteps = torch.randint(0, scheduler.timesteps, (batch_size * planes,), device=device)
+            latent = latent.view(batch_size, planes * features, height, width).to(device)
+            timesteps = torch.randint(0, scheduler.timesteps, (batch_size, ), device=device)
             cond = torch.randn(batch_size * planes, 32, device=device)
             noisy_data, noise = scheduler.add_noise(latent, timesteps)
-            print(noisy_data.shape)
+            print('Noise', noisy_data.shape, 'N', noise.shape)
             print(timesteps.shape)
             print(cond.shape)
             optimizer.zero_grad()

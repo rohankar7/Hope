@@ -4,6 +4,7 @@ from torchvision import transforms
 import numpy as np
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 shuffle_condition = False
 class TriplaneDataset(Dataset):
     def __init__(self, file_paths, transform=None):
@@ -23,11 +24,11 @@ class TriplaneDataset(Dataset):
 
 def triplane_dataloader(): # Storing triplane paths in a list
     out_dir = './images'
-    triplane_paths = [os.path.join(out_dir, path) for path in os.listdir(out_dir)]
+    triplane_paths = [os.path.join(out_dir, path) for path in os.listdir(out_dir)[:100]]
     transform = transforms.Compose([
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        transforms.Normalize(mean = 0, std = 1),
+        # transforms.Normalize(mean = 0, std = 1),
     ])
     dataset = TriplaneDataset(triplane_paths, transform=transform)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=shuffle_condition)
@@ -66,6 +67,8 @@ def embedding_dataloader(): # Storing latent paths in a list
     torch.set_printoptions(precision=10)
     embeddings_dir = './text/embedding.csv'
     embeddings_df = pd.read_csv(embeddings_dir)  # Replace with your file path
+    triplane_models = [x.split('.')[0].split('_')[1] for x in os.listdir('./images')[:100]]
+    embeddings_df = embeddings_df[embeddings_df['Subclass'].isin(triplane_models)]
     dataset = EmbeddingDataset(embeddings_df)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=shuffle_condition)
     return dataloader

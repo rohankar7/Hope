@@ -7,17 +7,12 @@
 # Use the latent triplanes to train the Diffusion model
 # Use the Diffusion model to generate triplanes
 # Use the triplanes generated from the diffusion model to generate the .ply model
-# Convert text descriptions to latent space
-# Use those latent space to map the text descriptions to 3D models
 # Convert meshes to watertight meshes: https://chatgpt.com/share/56d27eb5-01aa-493a-80df-e48287f9721f
-# Apply mesh refinement
+# Apply mesh refinement and SDS
 
 # TODO:
-# Create a Denoising U-net
-# Include Self-Attention blocks
+# 
 
 # QUESTIONS:------------------------------------------------------------
 # How to improve the VAE loss when it stops around 35000
-# How to convert text embeddings to the same latent space used to train the diffusion model
-# Should we train the diffusion model on the latent triplane data or also on the data of the latent text embeddings
 # How to extract features like density from the .obj files

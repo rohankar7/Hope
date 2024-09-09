@@ -9,55 +9,77 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 triplane_data = triplane_dataloader()
 latent_dimension = 32
-mean_logvar_split = 3
+mean_logvar_split = 2
 # logvar_split = 2
-num_channels = 4
+num_channels = 3
 
 class VAE(nn.Module):
     def __init__(self):
         super().__init__()
+        # TODO: Check z.py for loss BCE or MSE?
         # Encoder
         self.encoder_conv = nn.Sequential(
             # nn.Conv2d(num_channels, 16, kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(num_channels, 16, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(num_channels, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             # nn.MaxPool2d(1),
-            nn.Dropout(0.2),
+            # nn.Dropout(0.2),
             # nn.Conv2d(16, num_channels, kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(16, num_channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(num_channels),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            # nn.Dropout(0.1),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            # nn.Dropout(0.1)
         )
+        self.flattened_dim = 256 * 32 * 32
+        self.fc1 = nn.Linear(self.flattened_dim, 3 * 32 * 32)
+        # self.fc2 = nn.Linear(256, latent_dimension)
+        self.dc1 = nn.Linear(3 * 32 * 32, self.flattened_dim)
         # Decoder
         self.decoder_conv = nn.Sequential(
-            nn.ConvTranspose2d(mean_logvar_split, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(16),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
             # nn.ReLU(),
             nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.ConvTranspose2d(16, num_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
+            # nn.Dropout(0.1),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            # nn.ReLU(),
+            nn.LeakyReLU(),
+            # nn.Dropout(0.1),
+            nn.ConvTranspose2d(64, num_channels, kernel_size=4, stride=2, padding=1),
             nn.Sigmoid()  # Ensuring output is between 0 and 1
         )
     
     def encode(self, x):
-        x = self.encoder_conv(x)
-        mu = x[:, :mean_logvar_split, :, :]  # first 2 channels for mean
-        logvar = x[:, mean_logvar_split:, :, :]  # last 2 channels for logvar
-        return mu, logvar
+        # x = self.encoder_conv(x)
+        # mu = x[:, :mean_logvar_split, :, :]  # first 2 channels for mean
+        # logvar = x[:, mean_logvar_split:, :, :]  # last 2 channels for logvar
+        # return mu, logvar
         # return x.view(-1, 3, 32, 32, 3)
+        x = self.encoder_conv(x)
+        x = x.view(-1, self.flattened_dim)
+        return self.fc1(x), self.fc1(x) # For mu and logvar
     
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mu + eps * std
+        # return mu + eps * std
+        return eps.mul(std).add_(mu)
     
     def decode(self, z):
+        z = self.dc1(z)
+        z = z.reshape(3, 256, latent_dimension, latent_dimension)
         return self.decoder_conv(z)
     
     def forward(self, x):
         mu, logvar = self.encode(x)
+        print(mu.shape, logvar.shape)
+        # mu, logvar = mu.squeeze(), logvar.squeeze()
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
@@ -69,35 +91,37 @@ def tv_loss(x):
     tv_h = torch.pow((x[:, :, :, 1:] - x[:, :, :, :-1]), 2).sum()
     return (tv_h / count_h + tv_h / count_w) / batch_size
 
-def vae_loss(recon_x, x, mu, logvar, beta=2e-3):
+def vae_loss(recon_x, x, mu, logvar, beta=1e-4):
     # BCE = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
-    BCE = nn.functional.mse_loss(recon_x, x, reduction='sum')
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    MSE = nn.functional.mse_loss(recon_x, x, reduction='mean')
+    # KLD = -0.5 * torch.mean(torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), 1))
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / x.size(0)
     TV = tv_loss(recon_x)
-    L1 = torch.norm(x - recon_x, p=torch.inf)
-    return BCE + KLD + beta * TV + L1
+    L1 = torch.norm(x - recon_x, p=1) / x.size(0)
+    return MSE + KLD + beta * (TV + L1)
     # return BCE + KLD + beta * TV
 
-def train_vae(ae=None):
+def train_vae():
     save_path = './vae_weights'
     os.makedirs(save_path, exist_ok=True)
-    vae = VAE().to(device) if ae==None else ae
+    vae = VAE().to(device)
     # optimizer = optim.Adam(vae.parameters(), lr=1e-4, weight_decay=1e-5)
-    optimizer = optim.Adam(vae.parameters(), lr=1e-4)
+    lr_rate = 1e-5
+    optimizer = optim.Adam(vae.parameters(), lr=lr_rate)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5)
-    num_epochs = 100
-
+    num_epochs = 10
     for epoch in range(num_epochs):
         epoch_loss = 0
         for triplanes in triplane_data:
             triplanes = triplanes.to(device)
-            batch_size, num_planes, height, width, channels = triplanes.size()
-            triplanes = triplanes.view(batch_size * num_planes, height, width, channels)
+            batch_size, num_planes, channels, height, width = triplanes.size()
+            # print('Hey', batch_size, num_channels, channels, height, width)
+            triplanes = triplanes.view(batch_size * num_planes, channels, height, width)
             optimizer.zero_grad()
-            recon_batch, mu, logvar = vae(triplanes)
-            loss = vae_loss(recon_batch, triplanes, mu, logvar)
+            recon_triplane, mu, logvar = vae(triplanes)
+            loss = vae_loss(recon_triplane, triplanes, mu, logvar)
             loss.backward()
-            nn.utils.clip_grad_norm_(vae.parameters(), max_norm=1.0)
+            # nn.utils.clip_grad_norm_(vae.parameters(), max_norm=1.0)
             optimizer.step()
             epoch_loss += loss.item()
         
@@ -121,28 +145,39 @@ def viz_projections(xy_projection, yz_projection, zx_projection):
     plt.imshow(zx_projection, cmap=cmap)
     plt.show() 
 
-def save_latent_representation(dataloader, vae, output_dir):
+def save_latent_representation():
+    vae  = VAE().to(device)
+    vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
     vae.eval()  # Set the VAE to evaluation mode
-    os.makedirs(output_dir, exist_ok=True)
-    latent_records = []
+    latent_output_dir = './latents'
+    os.makedirs(latent_output_dir, exist_ok=True)
+    latent_encodings = []
     with torch.no_grad():
-        for i, triplanes in enumerate(dataloader):
+        for i, triplanes in enumerate(triplane_dataloader()):
             triplanes = triplanes.to(device)  # Moving data to the appropriate device
-            # Reshape triplanes to (batch_size * num_planes, height, width, channels)
-            triplanes = triplanes.permute(0, 1, 4, 2, 3).contiguous().view(-1, num_channels, 128, 128)
+            # triplanes = triplanes.permute(0, 1, 4, 2, 3).contiguous().view(-1, num_channels, 256, 256)
+            # Reshape triplanes to (batch_size * num_planes, channels, height, width)
+            b, p, c, h, w = triplanes.size()
+            print(triplanes.shape)
+            triplanes = triplanes.view(b*p, c, h, w)
             mu, logvar = vae.encode(triplanes)
             latent_representation = torch.cat([mu, logvar], dim=1)
-            latent_path = os.path.join(output_dir, f'latent_{i}.pt')
-            torch.save(latent_representation.cpu(), latent_path)    # latent shape: batch_size * num_planes(3) x num_features(4) x height(32) x width(32)
-            latent_representation = latent_representation[:, :3, :, :].permute(0, 2, 3, 1).contiguous().cpu().detach().numpy()
-            viz_projections(latent_representation[0], latent_representation[1], latent_representation[2])
+            latent_path = os.path.join(latent_output_dir, f'latent_{i}.pt')
+            latent_encodings.append((mu, logvar))
+            torch.save(latent_representation.cpu(), latent_path)    # latent shape: batch_size * num_planes(3) x num_features(3) x height(32) x width(32)
+        for _ in latent_encodings:
+            z_reparametrized = vae.reparameterize(mu, logvar)
+            z_decoded = vae.decode(z_reparametrized)
+            print(z_decoded.shape)
+            z_decoded = z_decoded.permute(0, 2, 3, 1).contiguous().cpu().detach().numpy()
+            viz_projections(z_decoded[0], z_decoded[1], z_decoded[2])
 
 def main():
     print('Main function: VAE')
-    # latent_output_dir = './latents'
-    # vae = VAE().to(device)
-    # train_vae()
-    # save_latent_representation(triplane_data, vae, latent_output_dir)   # Saving the latent representations
+    train_vae()
+    save_latent_representation()   # Saving the latent representations
+    # model = VAE()
+    # print(model)
 
 if __name__ == '__main__':
     main()
