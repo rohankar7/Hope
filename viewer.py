@@ -1,10 +1,20 @@
 import os
-from ShapeNetCore import *
 import trimesh
 import numpy as np
-# file_path = 'C:/ShapeNetCore/02691156/10155655850468db78d106ce0a280f87/models/model_normalized.obj'
-# mesh = trimesh.load('./generated_models/02747177_10839d0dc35c94fcf4fb4dee5181bee_rotated.ply', force='mesh')
-# mesh.show()
+# file_path = 'C:/ShapeNetCore/02958343/54b89bb4ed5aa492e23d60a1b706b44f/models/model_normalized.obj'
+file_path = './generated_models_256/02747177_1d5e46b18684ede7ffe3432ba4f2e6d3.ply'
+mesh = trimesh.load(file_path, force='mesh')
+mesh.show()
+
+# Voxelization: convert mesh to a voxel grid
+voxel_grid = mesh.voxelized(pitch=1.0)  # Adjust 'pitch' as necessary for your resolution
+
+# Create a visualization of the voxel grid using boxes
+voxel_mesh = voxel_grid.as_boxes()
+
+# Display the voxel boxes in a scene
+scene = trimesh.Scene([voxel_mesh])
+scene.show()
 
 
 # class CrossAttention(nn.Module):

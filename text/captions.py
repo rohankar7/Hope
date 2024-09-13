@@ -10,7 +10,6 @@ load_dotenv()
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def get_prompt(text):
-    # Prepare the prompt with few-shot examples
     prompt = f"""
     Compress the given description into only one sentence. Remove unrelated phrases and discard repeated information. Example:
     Text: The focussed object in the image is a white, circular object with a curved top. It has a smooth surface and a slight curve at the top. The object appears to be made of a material that gives it a slightly textured appearance. The color of the object is white, and it has a reflective quality to it. The object is positioned centrally in the image, and it is the only object in the frame. There are no other objects or texts visible in the image.
@@ -26,7 +25,7 @@ ShapeNetCoreDescriptions = {
     'Subclass': [],
     'Caption': [],
 }
-output_file_path = './text/all_captions.csv'
+output_file_path = './text/captions.csv'
 df = pd.read_csv('./text/descriptions.csv')
 
 for path in model_paths:
@@ -39,10 +38,8 @@ for path in model_paths:
             "role": "user", "content": get_prompt(str(description)),
         }],
         model="gpt-4o-mini",
-        # model="text-embedding-3-small",
         temperature=0,
     )
-    # print(response.headers.get('x-request-id'))
     completion = response.parse()
     caption = str(completion.choices[0].message.content)
     ShapeNetCoreDescriptions['Caption'].append(caption)

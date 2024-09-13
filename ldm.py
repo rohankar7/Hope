@@ -1,23 +1,180 @@
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
-from data_loader import latent_dataloader, triplane_dataloader
+from openai import OpenAI
 import os
-
+import numpy as np
+from data_loader import latent_dataloader, embedding_dataloader, triplane_dataloader
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# TODO
-def some_refinement_function(model):
-    return
 
-# TODO
-def refine_model(coarse_model):
-    # Implement refinement process using SDS or other techniques
-    # This could be by using iterative optimization to improve the model
-    refined_model = some_refinement_function(coarse_model)
-    return refined_model
+# class CrossAttention(nn.Module):
+#     def __init__(self, feature_dim, embed_dim, num_heads=1):
+#         super().__init__()
+#         self.num_heads = num_heads
+#         self.query_conv = nn.Conv2d(feature_dim, feature_dim, kernel_size=1)
+#         self.key_conv = nn.Linear(embed_dim, feature_dim)
+#         self.value_conv = nn.Linear(embed_dim, feature_dim)
+#         self.attention = nn.MultiheadAttention(embed_dim=feature_dim, num_heads=num_heads)
 
-# TODO
-# refined_model = refine_model(coarse_model)
+#     def forward(self, x, embedding):
+#         batch_size, feature_dim, H, W = x.shape
+#         query = self.query_conv(x).view(batch_size, feature_dim, -1).permute(2, 0, 1)  # [HW, batch_size, feature_dim]
+#         # query = self.query_conv(x)
+#         key = self.key_conv(embedding)
+#         value = self.value_conv(embedding)
+        
+#         # Reshape key and value for each head and spatial location
+#         key = key.repeat(1, H * W).view(-1, batch_size, feature_dim).permute(1, 0, 2)
+#         value = value.repeat(1, H * W).view(-1, batch_size, feature_dim).permute(1, 0, 2)
+#         # key = key.unsqueeze(1).expand(-1, H * W, -1).reshape(H * W, batch_size, feature_dim)
+#         # value = value.unsqueeze(1).expand(-1, H * W, -1).reshape(H * W, batch_size, feature_dim)
+
+#         attended, _ = self.attention(query, key, value)
+#         attended = attended.permute(1, 2, 0).view(batch_size, feature_dim, H, W)
+        
+#         combined_features = x + attended
+#         return combined_features
+
+# class CrossAttention(nn.Module):
+#     def __init__(self, embed_dim, num_heads=8):
+#         super(CrossAttention, self).__init__()
+#         self.embed_dim = embed_dim
+#         self.num_heads = num_heads
+#         self.query_dim = 64  # Dimension of the projected query feature maps
+        
+#         # Linear transformations for query, key, and value
+#         self.query_proj = nn.Linear(embed_dim, self.query_dim * num_heads)
+#         self.key_proj = nn.Linear(embed_dim, self.query_dim * num_heads)
+#         self.value_proj = nn.Linear(embed_dim, self.query_dim * num_heads)
+
+#         # Output projection layer
+#         self.output_proj = nn.Linear(self.query_dim * num_heads, 256)
+
+#         # Scaling factor to normalize the dot products
+#         self.scale = 1. / (self.query_dim ** 0.5)
+
+#     def forward(self, x, embedding):
+#         batch_size, _, height, width = x.shape
+#         # Flatten the spatial dimensions
+#         x = x.view(batch_size, 256, -1).permute(0, 2, 1)  # Shape: [batch, height*width, channels]
+        
+#         # Expand the embedding to match the batch size
+#         embedding = embedding.repeat(batch_size, 1)
+
+#         # Project queries, keys, values
+#         q = self.query_proj(embedding).view(batch_size, self.num_heads, self.query_dim).permute(1, 0, 2)
+#         k = self.key_proj(embedding).view(batch_size, self.num_heads, self.query_dim).permute(1, 0, 2)
+#         v = self.value_proj(embedding).view(batch_size, self.num_heads, self.query_dim).permute(1, 0, 2)
+        
+#         # Attention mechanism
+#         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+#         attn = F.softmax(attn_scores, dim=-1)
+#         context = torch.matmul(attn, v).permute(1, 0, 2).contiguous()
+        
+#         # Concatenate heads and project output
+#         context = context.view(batch_size, -1)
+#         output = self.output_proj(context)
+
+#         return output
+
+class CrossAttention(nn.Module):
+    def __init__(self, features_dim, embed_dim, num_heads=8):
+        super(CrossAttention, self).__init__()
+        self.num_heads = num_heads
+        self.features_dim = features_dim
+        self.embed_dim = embed_dim
+        self.scale = (self.features_dim // num_heads) ** -0.5
+
+        self.to_q = nn.Linear(features_dim, features_dim, bias=False)
+        self.to_kv = nn.Linear(embed_dim, features_dim * 2, bias=False)
+        # self.to_out = nn.Linear(features_dim, features_dim)
+
+    def forward(self, x, embedding):
+        b, _, h, w = x.shape
+
+        # Query from feature maps
+        q = self.to_q(x.flatten(2).transpose(1, 2))  # Shape: (batch_size, height*width, features_dim)
+        q = q.view(b, h * w, self.num_heads, self.features_dim // self.num_heads).permute(0, 2, 1, 3)
+
+        # Key and value from embedding vector
+        kv = self.to_kv(embedding.expand(b, -1)).view(b, 2, self.num_heads, self.features_dim // self.num_heads).permute(1, 2, 0, 3)
+        k, v = kv[0], kv[1]
+
+        # Scaled Dot-Product Attention
+        q = q * self.scale
+        attn = torch.matmul(q, k.transpose(-2, -1))
+        attn = F.softmax(attn, dim=-1)
+
+        # Aggregate values
+        out = torch.matmul(attn, v)
+        out = out.transpose(1, 2).contiguous().view(b, h * w, self.features_dim)
+        out = out.view(b, self.features_dim, h, w)  # Reshape to (batch_size, features_dim, height, width)
+        # Final linear transformation
+        # out = self.to_out(out)
+
+        return out
+
+class UNetWithCrossAttention(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # num_feature_channels = 3 * 3
+        num_feature_channels = 3
+        # Define the standard UNet layers with batch normalization
+        self.enc1 = nn.Sequential(
+            nn.Conv2d(num_feature_channels, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+        self.enc2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+        self.enc3 = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True)
+        )
+        # Cross attention layer
+        self.cross_attention = CrossAttention(256, 1536)
+        # Continue with the rest of the UNet with batch normalization
+        self.dec1 = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+        self.dec2 = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+        self.dec3 = nn.Conv2d(64, num_feature_channels, kernel_size=3, padding=1)
+        # Consider activation if output needs to be bounded (e.g., tanh for [-1, 1])
+        self.final_activation = nn.Tanh()  # Uncomment if needed
+
+    def forward(self, x, embedding):
+        # Encoding with skip connections
+        x1 = self.enc1(x)
+        x2 = self.enc2(x1)
+        x3 = self.enc3(x2)
+        # Apply cross-attention
+        x3 = self.cross_attention(x3, embedding)
+        # Decoding with skip connections
+        x = self.dec1(x3)
+        x = self.dec2(x)
+        x = self.dec3(x)
+        # Final activation (if needed)
+        # x = self.final_activation(x)  # Uncomment if output activation is necessary
+        return x
+
+
+# class CosineNoiseScheduler:
+#     def __init__(self, num_steps):
+#         self.num_steps = num_steps
+#         self.betas = np.cos(np.linspace(0, np.pi / 2, num_steps)) ** 2
+
+#     def get_noise_factor(self, step):
+#         return self.betas[step]
 
 class NoiseScheduler:
     def __init__(self, timesteps, schedule_fn):
@@ -47,152 +204,51 @@ class NoiseScheduler:
 def linear_beta_schedule(timesteps, start=0.0001, end=0.02):
     return torch.linspace(start, end, timesteps)
 
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, cond_channels=0, multiplier=1):
-        super().__init__()
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(multiplier * in_channels + cond_channels, out_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.ReLU()
-        )
-
-    def forward(self, x):
-        return self.double_conv(x)
-
-class DownBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, cond_channels):
-        super().__init__()
-        self.down = nn.Sequential(
-            # nn.MaxPool2d(kernel_size=2, stride=2),
-            DoubleConv(in_channels, out_channels, cond_channels=cond_channels)
-        )
-        self.pooling = nn.AvgPool2d(kernel_size=2, stride=2)
-
-    def forward(self, x, c):
-        _, _, w, h = x.size()
-        c = c.expand(-1, -1, w, h)  # Shape conditional input to match image
-        x = self.down(torch.cat([x,c], 1)) # Convolutions over image + condition
-        x_small = self.pooling(x)   # Downsample output for next block
-        return x, x_small
-
-class UpBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, bilinear=True):
-        super().__init__()
-        # if bilinear: self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        # else: self.upsample = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2) # Ask why?
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        # self.upsample = nn.Upsample(scale_factor=2)
-        self.up = nn.Sequential(
-            DoubleConv(in_channels, out_channels, multiplier=2)
-        )
-
-    def forward(self, x_small, x_big):
-        x_upsampled = self.upsample(x_small)
-        # input is CHW
-        diffY = x_big.size()[2] - x_upsampled.size()[2]
-        diffX = x_big.size()[3] - x_upsampled.size()[3]
-
-        x_upsampled = F.pad(x_upsampled, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2]) # concatenate along the channels axis
-        x = torch.cat([x_big, x_upsampled], dim=1)
-        return self.up(x)
-
-class LatentDiffusionModel(nn.Module):
-    def __init__(self, in_channels, cond_channels, time_embed_dim, latent_dim, out_channels, steps=1000):
-        super().__init__()
-        self.time_embedding = nn.Embedding(steps, time_embed_dim)
-        self.cond_projection = nn.Linear(cond_channels, latent_dim)
-        self.in_channels = DoubleConv(in_channels, 64)
-        self.out_channels = out_channels
-        self.inc = DoubleConv(in_channels, 64)
-        self.down1 = DownBlock(64, 128, latent_dim)
-        self.down2 = DownBlock(128, 256, latent_dim)
-        # self.down3 = DownBlock(256, 512, latent_dim)
-        # self.down4 = DownBlock(512, 512, latent_dim)
-        self.bottleneck = DoubleConv(256 + latent_dim, 512)
-        # self.up1 = UpBlock(1024, 256)
-        self.up1 = UpBlock(512, 256)
-        self.up2 = UpBlock(256, 128)
-        self.up3 = UpBlock(128, 64)
-        self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
-
-    def forward(self, x, t, cond):
-        b, c, h, w = x.shape
-        print(t.shape)
-        timestep = self.time_embedding(t)
-        print(timestep.shape)
-        timestep = timestep.view(timestep.size(0), timestep.size(1)).unsqueeze(2).unsqueeze(3)
-        print(cond.shape)
-        cond = self.cond_projection(cond)
-        cond = cond.view(cond.size(0), cond.size(1)).unsqueeze(2).unsqueeze(3)
-        timestep = self.time_embedding(t).view(b, -1, 1, 1)
-        timestep = timestep.expand(b, timestep.size(1), h, w)  # Expand timestep to match cond's spatial dimensions
-        cond = self.cond_projection(cond).view(b, -1, 1, 1)
-        cond = cond.expand(b, cond.size(1), h, w)  # Expand cond to match spatial dimensions
-        cond = torch.cat([timestep, cond], dim=1)
-        x1 = self.inc(x)
-        x2, x1_small = self.down1(x1, cond)
-        x3, x2_small = self.down2(x2, cond)
-        # x4, x3_small = self.down3(x3, cond)
-        x_bottleneck = self.bottleneck(torch.cat([x3, cond.expand_as(x3)], dim=1))
-        x = self.up1(x2_small, x_bottleneck)
-        x = self.up2(x1_small, x)
-        x = self.up3(x1, x)
-        logits = self.outc(x)
-        return logits
-
-def train_ldm():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    latent_dim = 32
-    ldm = LatentDiffusionModel(in_channels=4, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=4).to(device)
-    optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
-    ldm.train()
-    # latent_data = latent_dataloader()
-    latent_data = triplane_dataloader()
-    num_epochs = 100
-    timesteps = 1000
-    scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
+def train():
+    # Initialize model
+    model = UNetWithCrossAttention().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = torch.nn.MSELoss()
     checkpoint_dir = './ldm_checkpoints'
     os.makedirs(checkpoint_dir, exist_ok=True)
-    # Training loop
-    for epoch in range(1, num_epochs+1):
+    # num_epochs = 100
+    num_epochs = 10
+    num_timesteps = 1000
+    scheduler = NoiseScheduler(num_timesteps, linear_beta_schedule)
+    model.train()
+    latent_data = triplane_dataloader()
+    embedding_data = embedding_dataloader()
+    for epoch in range(num_epochs):
         epoch_loss = 0
-        for latent in latent_data:
-            batch_size, planes, features, height, width = latent.size()
-            latent = latent.view(batch_size, planes * features, height, width).to(device)
-            timesteps = torch.randint(0, scheduler.timesteps, (batch_size, ), device=device)
-            cond = torch.randn(batch_size * planes, 32, device=device)
-            noisy_data, noise = scheduler.add_noise(latent, timesteps)
-            print('Noise', noisy_data.shape, 'N', noise.shape)
-            print(timesteps.shape)
-            print(cond.shape)
-            optimizer.zero_grad()
-            outputs = ldm(noisy_data, timesteps, cond)
-            # Upsample noise to match the output size
-            # noise = F.interpolate(noise, size=(128, 128), mode='bilinear', align_corners=False)
-            loss = F.mse_loss(outputs, noise)  # Loss between predicted noise and actual noise
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-        print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss/len(latent_data)}')
-        if epoch % 10 == 0:
+        for latent_tensors, embeddings in zip(latent_data, embedding_data):
+            b, p, c, h, w = latent_tensors.size()
+            latent_tensors = latent_tensors.reshape(b*p, c, h, w).to(device)
+            embeddings = embeddings.to(device)
+            for step in range(num_timesteps):
+                timesteps = torch.randint(0, scheduler.timesteps, (b*p, ), device=device)
+                noisy_data, noise = scheduler.add_noise(latent_tensors, timesteps)  # Adding noise
+                # noisy_latents = latent_tensors + noisy_data
+                optimizer.zero_grad()   # Zero the parameter gradients
+                # Forward pass
+                reconstructed_noise = model(noisy_data, embeddings)
+                loss = criterion(reconstructed_noise, noise)    # Predicting the added noise
+                # Backward pass
+                loss.backward()
+                optimizer.step()    # Optimization
+                epoch_loss += loss.item()
+        print(f"Epoch {epoch+1}, Loss: {epoch_loss / len(latent_data)}")
+        if epoch % 8 == 0:
             checkpoint_path = f'{checkpoint_dir}/ldm_epoch_{epoch}.pth'
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': ldm.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()
-            }, checkpoint_path)
-
-def load_checkpoint(model, optimizer, path):
-    checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
-    return model, optimizer, epoch
+            # torch.save({
+            #     'epoch': epoch,
+            #     'model_state_dict': model.state_dict(),
+            #     'optimizer_state_dict': optimizer.state_dict()
+            # }, checkpoint_path)
 
 def main():
-    # Training the ldm
-    train_ldm() # Uncomment during training
+    # Run training
+    print('Main function: LDM')
+    train()
 
 if __name__ == '__main__':
     main()

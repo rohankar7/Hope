@@ -7,10 +7,12 @@ import os
 from skimage import measure
 from skimage.morphology import binary_closing, binary_opening, disk
 from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
-from ganesha import UNetWithCrossAttention
+from ldm import UNetWithCrossAttention
 from vae import VAE
-from ShapeNetCore import *
 from triplane import triplane_resolution
+from ldm import *
+import config
+from mlp import TriplaneMLP
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = 'cpu'
 # Additional file formats
@@ -94,7 +96,7 @@ def generate_mesh(triplane, zx_projection, resolution=triplane_resolution):
     verts, faces, normals, values = measure.marching_cubes(voxel_grid_smoothed, level=threshold)
     vertex_colors, face_colors = extract_colors(triplane, verts, faces, resolution)
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, vertex_normals=normals, vertex_attributes={'values':values}, vertex_colors=vertex_colors, face_colors=face_colors)
-    mesh.show()
+    # mesh.show()
     return mesh
 
 def repair_mesh(mesh):
@@ -112,37 +114,54 @@ def correct_rotation(triplane, resolution):
     try:
         mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
         print('Error 1')
-        return mesh
+        return repair_mesh(mesh)
     except RuntimeError as e:
         try:
             zx_projection_rotated = np.rot90(zx_projection_rotated, k=2)
             mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
             print('Error 2')
-            return mesh
+            return repair_mesh(mesh)
         except RuntimeError as e:
             try:
                 zx_projection_rotated = np.rot90(zx_projection_rotated, k=-1)
                 mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
                 print('Error 3')
-                return mesh
+                return repair_mesh(mesh)
             except RuntimeError as e:
                 print("No surface found at the given iso value")
     return
 
+def mesh_from_mlp(triplane):
+    model = TriplaneMLP(3*128*128*3, 64*64*64)
+    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_10.pth'))
+    model.eval()
+    with torch.no_grad():
+        input_tensor = torch.tensor(triplane.reshape(3 * 128 * 128 * 3), dtype=torch.float32)
+        output = model(input_tensor)
+        threshold = 0.5
+        voxel_grid_binary = (output > threshold).int()
+        voxel_grid_np = voxel_grid_binary.squeeze().numpy() 
+        mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
+        mesh = repair_mesh(mesh)
+        mesh.show()
+    return mesh
+
 def model_from_triplanes(output_dir, resolution):
     for np_triplane in os.listdir(output_dir):
         triplane = np.load(os.path.join(output_dir, np_triplane))
+        # mesh = mesh_from_triplanes(triplane)
         mesh = correct_rotation(triplane, resolution)
-        mesh = repair_mesh(mesh) # Mesh repairs
+        mesh = mesh_from_mlp(triplane)
         model_gen_dir = './generated_models'
-        os.makedirs(model_gen_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         mesh.export(f"{model_gen_dir}/{np_triplane.split('.')[0]}.ply")
         print('Exported')
 
-def generate_from_text(text, num_steps=1000):
+def generate_from_text(text):
+    timesteps = 1000
     ldm = UNetWithCrossAttention().to(device)
     optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
-    checkpoint_path = './ldm_checkpoints/ldm_epoch_0.pth'
+    checkpoint_path = './ldm_checkpoints/ldm_epoch_8.pth'
     ldm, optimizer, start_epoch = load_ldm_checkpoint(ldm, optimizer, checkpoint_path)
     ldm.to(device)
     ldm.eval()
@@ -152,17 +171,14 @@ def generate_from_text(text, num_steps=1000):
     embedding = client.embeddings.create(input = [text], model=embedding_model).data[0].embedding
     embedding = torch.tensor(embedding).to(device)
     # data_size = (1, 12, 32, 32)  # Size of the latent data
-    data_size = (1, 9, 256, 256)
-    current = torch.randn(data_size).to(device)  # Starting with random noise
+    data_size = (3, 3, 128, 128)
+    noise_scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
+    x_t = torch.randn(data_size).to(device)  # Starting with random noise
     # Reverse diffusion process
-    for step in range(num_steps - 1, -1, -1):
-        time_frac = step / float(num_steps)
-        noise_level = np.cos((1.0 - time_frac) * np.pi / 2) ** 2  # Cosine noise schedule
-        # Model predicts the reverse of the noise
-        predicted_noise = ldm(current, embedding)
-        current = current - predicted_noise * noise_level  # Reverse the noise addition
-    print('Current', current.shape)
-    return current
+    for t in reversed(range(noise_scheduler.timesteps)):
+        predicted_noise = ldm(x_t, t)
+        x_t = noise_scheduler.predict_start_from_noise(x_t, t, predicted_noise)
+    return x_t
 
 def decode_latent_triplanes(latent_triplanes):
     latent_dim = 64
@@ -170,21 +186,20 @@ def decode_latent_triplanes(latent_triplanes):
     vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
     vae.eval()
     latent_triplanes = torch.load('./latents/latent_0.pt').to(device)
-    # latent_triplanes = ldm(latent_vectors.unsqueeze(0))
-    # latent_triplanes = ldm(latent_vectors)
     decoded_triplanes = vae.decode(latent_triplanes[:, :3, :, :]).permute(0, 3, 2, 1).contiguous()
     return decoded_triplanes
 
 def main():
+    triplane_savedir = './generated_triplanes'
     text = 'A white aeroplane with red wings'
     coarse_latent_data = generate_from_text(text)
-    # coarse_triplanes = decode_latent_triplanes(coarse_latent_data).cpu().detach().numpy()
+    # print(coarse_latent_data.shape)
+    coarse_triplanes = decode_latent_triplanes(coarse_latent_data).cpu().detach().numpy()
     coarse_triplanes = coarse_latent_data.cpu().detach().numpy()
-    triplane_savedir = './generated_triplanes'
-    os.makedirs(triplane_savedir, exist_ok=True)
     np.save(f"{triplane_savedir}/{'output'}.npy", coarse_triplanes)
-    # triplane_savedir = './images'
-    model_from_triplanes(triplane_savedir, resolution=triplane_resolution)
+
+    # triplane_savedir = './triplane_images_128'
+    model_from_triplanes(triplane_savedir, resolution=config.triplane_resolution)
 
 if __name__ == "__main__":
     main()

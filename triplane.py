@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 from skimage.draw import polygon
 from ShapeNetCore import *
 import os
+import config
 
-triplane_resolution = 256
+# triplane_resolution = config.triplane_resolution
+triplane_resolution = 32
 dtype = np.float32
 
 def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolution):
@@ -114,21 +116,22 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     # triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
     return triplane
 
-def model_to_triplanes(out_dir, resolution=triplane_resolution):
-    for path in get_random_models()[:1]:
+def model_to_triplanes(out_dir):
+    for path in get_random_models():
         os.makedirs(out_dir, exist_ok=True)
         try:
-            triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution)
-            print(triplane.shape)
-            # print(triplane.shape) # 3 x N x N x 3
+            triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution)
+            print(path)
+            # Triplane shape: 3 x N x N x 3
             np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
-            print('Done')
+            print('Saved triplane')
         except IndexError as e:
             print('Skipped model:', path)
             continue
 
 def main():
-    model_to_triplanes('./images', resolution=triplane_resolution)
+    print('Main function: Triplane')
+    model_to_triplanes(f'./triplane_images_{triplane_resolution}')
 
 if __name__ == "__main__":
     main()

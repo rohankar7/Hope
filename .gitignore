@@ -2,6 +2,13 @@ __pycache__/
 vae_weights/
 ldm_checkpoints
 latents/
-images/
-generated_models/
+# generated_models/
+# generated_triplanes/
+triplane_images_128/
+triplane_images_256/
+clip_images/
+*.png
 .env
+*.ply
+*.npy
+*.pth
