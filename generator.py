@@ -2,16 +2,17 @@ import numpy as np
 import trimesh
 import torch
 from torch import optim
+from openai import OpenAI
 import os
 from skimage import measure
 from skimage.morphology import binary_closing, binary_opening, disk
 from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
-# from ldm import LatentDiffusionModel
-from model import LatentDiffusionModel
-from vae import *
-from file_address import *
+from ganesha import UNetWithCrossAttention
+from vae import VAE
+from ShapeNetCore import *
 from triplane import triplane_resolution
-
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu'
 # Additional file formats
 # mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=(rgb_final * 255).astype(np.uint8))
 #     if save_name:
@@ -72,10 +73,10 @@ def extract_colors(triplane, vertices, faces, resolution):
     return vertex_colors, face_colors
 
 def generate_mesh(triplane, zx_projection, resolution=triplane_resolution):
-    xy_projection = triplane[0][:, :, 0] * triplane[0][:, :, 3]
-    yz_projection = triplane[1][:, :, 0] * triplane[1][:, :, 3]
-    # xy_projection = triplane[0][:, :, -1]
-    # yz_projection = triplane[1][:, :, -1]
+    # xy_projection = triplane[0][:, :, 0] * triplane[0][:, :, 3]
+    # yz_projection = triplane[1][:, :, 0] * triplane[1][:, :, 3]
+    xy_projection = triplane[0][:, :, 0]
+    yz_projection = triplane[1][:, :, 0]
     zx_projection_rotated = zx_projection
     # Clean the projections
     xy_projection = clean_projection(xy_projection, 'closing', 2)
@@ -106,8 +107,8 @@ def repair_mesh(mesh):
     return mesh
 
 def correct_rotation(triplane, resolution):
-    zx_projection_rotated = triplane[2][:, :, 0] * triplane[2][:, :, 3]
-    # zx_projection_rotated = triplane[2][:, :, -1]
+    # zx_projection_rotated = triplane[2][:, :, 0] * triplane[2][:, :, 3]
+    zx_projection_rotated = triplane[2][:, :, 0]
     try:
         mesh = generate_mesh(triplane, zx_projection_rotated, resolution)
         print('Error 1')
@@ -136,33 +137,54 @@ def model_from_triplanes(output_dir, resolution):
         model_gen_dir = './generated_models'
         os.makedirs(model_gen_dir, exist_ok=True)
         mesh.export(f"{model_gen_dir}/{np_triplane.split('.')[0]}.ply")
-        # print('Exported')
+        print('Exported')
+
+def generate_from_text(text, num_steps=1000):
+    ldm = UNetWithCrossAttention().to(device)
+    optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
+    checkpoint_path = './ldm_checkpoints/ldm_epoch_0.pth'
+    ldm, optimizer, start_epoch = load_ldm_checkpoint(ldm, optimizer, checkpoint_path)
+    ldm.to(device)
+    ldm.eval()
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    embedding_model = "text-embedding-3-small"
+    text = text.replace("\n", " ")
+    embedding = client.embeddings.create(input = [text], model=embedding_model).data[0].embedding
+    embedding = torch.tensor(embedding).to(device)
+    # data_size = (1, 12, 32, 32)  # Size of the latent data
+    data_size = (1, 9, 256, 256)
+    current = torch.randn(data_size).to(device)  # Starting with random noise
+    # Reverse diffusion process
+    for step in range(num_steps - 1, -1, -1):
+        time_frac = step / float(num_steps)
+        noise_level = np.cos((1.0 - time_frac) * np.pi / 2) ** 2  # Cosine noise schedule
+        # Model predicts the reverse of the noise
+        predicted_noise = ldm(current, embedding)
+        current = current - predicted_noise * noise_level  # Reverse the noise addition
+    print('Current', current.shape)
+    return current
+
+def decode_latent_triplanes(latent_triplanes):
+    latent_dim = 64
+    vae  = VAE().to(device)
+    vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
+    vae.eval()
+    latent_triplanes = torch.load('./latents/latent_0.pt').to(device)
+    # latent_triplanes = ldm(latent_vectors.unsqueeze(0))
+    # latent_triplanes = ldm(latent_vectors)
+    decoded_triplanes = vae.decode(latent_triplanes[:, :3, :, :]).permute(0, 3, 2, 1).contiguous()
+    return decoded_triplanes
 
 def main():
-    # Instantiate the model and optimizer
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # latent_dim = 64
-    # ldm = LatentDiffusionModel(latent_dim).to(device)
-    # optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
-
-    # # Load the checkpoint for ldm
-    # checkpoint_path = './ldm_checkpoints/ldm_epoch_90.pth'
-    # ldm, optimizer, start_epoch = load_ldm_checkpoint(ldm, optimizer, checkpoint_path)
-    # ldm.eval()
-
-    # # Decode latent triplanes
-    # vae  = VAE(latent_dim=latent_dim).to(device)
-    # # train_vae(vae)
-    # vae.load_state_dict(torch.load('./vae_weights/weights.pth'))
-    # vae.eval()
-    # latent_vectors = torch.load('./latents/latent_0.pt').to(device)
-    # print(latent_vectors.unsqueeze(0).shape)
-
-    # latent_triplanes = ldm(latent_vectors.unsqueeze(0))
-    # # latent_triplanes = ldm(latent_vectors)
-    # decoded_triplanes = vae.decode(latent_triplanes)
-    # print('Shape', decoded_triplanes.shape)
-    model_from_triplanes('./images', resolution=triplane_resolution)
+    text = 'A white aeroplane with red wings'
+    coarse_latent_data = generate_from_text(text)
+    # coarse_triplanes = decode_latent_triplanes(coarse_latent_data).cpu().detach().numpy()
+    coarse_triplanes = coarse_latent_data.cpu().detach().numpy()
+    triplane_savedir = './generated_triplanes'
+    os.makedirs(triplane_savedir, exist_ok=True)
+    np.save(f"{triplane_savedir}/{'output'}.npy", coarse_triplanes)
+    # triplane_savedir = './images'
+    model_from_triplanes(triplane_savedir, resolution=triplane_resolution)
 
 if __name__ == "__main__":
     main()
