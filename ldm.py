@@ -239,11 +239,11 @@ def train():
         print(f"Epoch {epoch+1}, Loss: {epoch_loss / len(latent_data)}")
         if epoch % 8 == 0:
             checkpoint_path = f'{checkpoint_dir}/ldm_epoch_{epoch}.pth'
-            # torch.save({
-            #     'epoch': epoch,
-            #     'model_state_dict': model.state_dict(),
-            #     'optimizer_state_dict': optimizer.state_dict()
-            # }, checkpoint_path)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
+            }, checkpoint_path)
 
 def main():
     # Run training
