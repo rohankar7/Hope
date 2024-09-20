@@ -17,12 +17,6 @@ def plot_voxel(voxel_data):
     ax.set_zlabel('Z')
     plt.show()
 
-# Visualize the voxel grid
-# plot_voxel(voxel_data)
-# np.save('voxel_data.npy', voxel_data)
-
-# 03636649_fff6acd5b543ae02a9bdc22a1e02e82
-
 class TriplaneMLP(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
