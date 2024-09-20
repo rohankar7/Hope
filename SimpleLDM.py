@@ -37,8 +37,8 @@ timesteps = 1000
 scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
 
 class SimpleLatentDiffusionModel(nn.Module):
-    def __init__(self, feature_channels=1, target_height=128, target_width=128):
-        super(SimpleLatentDiffusionModel, self).__init__()
+    def __init__(self, feature_channels=4, target_height=128, target_width=128):
+        super().__init__()
         # We will create a model that simply upscales the input.
         self.upsample1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)  # 32 -> 64
         self.conv1 = nn.Conv2d(feature_channels, feature_channels, kernel_size=3, padding=1)
@@ -60,7 +60,7 @@ class SimpleLatentDiffusionModel(nn.Module):
 def train_simple_latent_diffusion_model(scheduler, num_epochs=100):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     latent_dim = 32
-    model = SimpleLatentDiffusionModel(feature_channels=1, target_height=128, target_width=128).to(device)
+    model = SimpleLatentDiffusionModel(feature_channels=4, target_height=128, target_width=128).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     latent_data = latent_dataloader()
     num_epochs = 100

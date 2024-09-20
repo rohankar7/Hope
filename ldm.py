@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
-from data_loader import latent_dataloader
+from data_loader import latent_dataloader, triplane_dataloader
 import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -81,7 +81,8 @@ class UpBlock(nn.Module):
         super().__init__()
         # if bilinear: self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         # else: self.upsample = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2) # Ask why?
-        self.upsample = nn.Upsample(scale_factor=2)
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        # self.upsample = nn.Upsample(scale_factor=2)
         self.up = nn.Sequential(
             DoubleConv(in_channels, out_channels, multiplier=2)
         )
@@ -117,21 +118,18 @@ class LatentDiffusionModel(nn.Module):
 
     def forward(self, x, t, cond):
         b, c, h, w = x.shape
-        print(x.shape, t.shape, cond.shape)
+        print(t.shape)
         timestep = self.time_embedding(t)
+        print(timestep.shape)
         timestep = timestep.view(timestep.size(0), timestep.size(1)).unsqueeze(2).unsqueeze(3)
-        # print(timestep.shape)
+        print(cond.shape)
         cond = self.cond_projection(cond)
         cond = cond.view(cond.size(0), cond.size(1)).unsqueeze(2).unsqueeze(3)
-        # print(cond.shape)
         timestep = self.time_embedding(t).view(b, -1, 1, 1)
-        # print('Timestep', timestep.shape)
         timestep = timestep.expand(b, timestep.size(1), h, w)  # Expand timestep to match cond's spatial dimensions
         cond = self.cond_projection(cond).view(b, -1, 1, 1)
         cond = cond.expand(b, cond.size(1), h, w)  # Expand cond to match spatial dimensions
         cond = torch.cat([timestep, cond], dim=1)
-        # cond = torch.cat([timestep, cond], dim=1)
-        # cond = torch.cat([timestep, cond], dim=1)
         x1 = self.inc(x)
         x2, x1_small = self.down1(x1, cond)
         x3, x2_small = self.down2(x2, cond)
@@ -146,11 +144,12 @@ class LatentDiffusionModel(nn.Module):
 def train_ldm():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     latent_dim = 32
-    ldm = LatentDiffusionModel(in_channels=1, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=1).to(device)
+    ldm = LatentDiffusionModel(in_channels=4, cond_channels=32, time_embed_dim=32, latent_dim=latent_dim, out_channels=4).to(device)
     optimizer = optim.Adam(ldm.parameters(), lr=1e-4)
     ldm.train()
-    latent_data = latent_dataloader()
-    num_epochs = 20
+    # latent_data = latent_dataloader()
+    latent_data = triplane_dataloader()
+    num_epochs = 100
     timesteps = 1000
     scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
     checkpoint_dir = './ldm_checkpoints'
@@ -160,12 +159,17 @@ def train_ldm():
         epoch_loss = 0
         for latent in latent_data:
             batch_size, planes, features, height, width = latent.size()
-            latent = latent.view(batch_size * planes, features, height, width).to(device)
-            timesteps = torch.randint(0, scheduler.timesteps, (batch_size * planes,), device=device)
+            latent = latent.view(batch_size, planes * features, height, width).to(device)
+            timesteps = torch.randint(0, scheduler.timesteps, (batch_size, ), device=device)
             cond = torch.randn(batch_size * planes, 32, device=device)
             noisy_data, noise = scheduler.add_noise(latent, timesteps)
+            print('Noise', noisy_data.shape, 'N', noise.shape)
+            print(timesteps.shape)
+            print(cond.shape)
             optimizer.zero_grad()
             outputs = ldm(noisy_data, timesteps, cond)
+            # Upsample noise to match the output size
+            # noise = F.interpolate(noise, size=(128, 128), mode='bilinear', align_corners=False)
             loss = F.mse_loss(outputs, noise)  # Loss between predicted noise and actual noise
             loss.backward()
             optimizer.step()
@@ -186,5 +190,9 @@ def load_checkpoint(model, optimizer, path):
     epoch = checkpoint['epoch']
     return model, optimizer, epoch
 
-# Training the ldm
-train_ldm() # Uncomment during training
+def main():
+    # Training the ldm
+    train_ldm() # Uncomment during training
+
+if __name__ == '__main__':
+    main()

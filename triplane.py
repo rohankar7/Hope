@@ -1,12 +1,11 @@
 import numpy as np
 import trimesh
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from skimage.draw import polygon
-from file_address import *
+from ShapeNetCore import *
 import os
 
-triplane_resolution = 128
+triplane_resolution = 256
 dtype = np.float32
 
 def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolution):
@@ -36,7 +35,7 @@ def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolut
     sdf_xy = trimesh.proximity.signed_distance(mesh, xy_points).reshape((resolution, resolution))
     sdf_yz = trimesh.proximity.signed_distance(mesh, yz_points).reshape((resolution, resolution))
     sdf_zx = trimesh.proximity.signed_distance(mesh, zx_points).reshape((resolution, resolution))
-    sdf_values = np.stack([sdf_xy, sdf_yz, sdf_zx], axis=0)
+    sdf_values = np.stack([sdf_xy, sdf_yz, sdf_zx], axis=0, dtype=dtype)
     return sdf_values
 
 def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
@@ -51,10 +50,20 @@ def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
     # Scale the vertices to fit in the grid while preserving aspect ratios
     vertices = mesh.vertices.copy()
     vertices = (vertices - min_bound) * scale
-    # vertices = np.clip(vertices, 0, resolution - 1).astype(int)
+    # Center the vertices in the grid
+    center_offset = (resolution - (vertices.max(axis=0) + vertices.min(axis=0))) / 2
+    if plane == 'xy':
+        vertices[:, :2] += center_offset[:2]
+    elif plane == 'yz':
+        vertices[:, 1:] += center_offset[1:]
+    elif plane == 'zx':
+        vertices[:, [2, 0]] += center_offset[[2, 0]]
+
+    # Ensure vertices are within the grid
+    vertices = np.clip(vertices, 0, resolution - 1).astype(float)
     # Normalising colours
     vertex_colors = mesh.visual.vertex_colors[:, :3] / 255.0  # Normalize colours
-    face_colors = mesh.visual.face_colors[:, :3] / 255.0
+    # face_colors = mesh.visual.face_colors[:, :3] / 255.0
     for face in mesh.faces:
         tri = vertices[face]
         color = np.mean(vertex_colors[face], axis=0, dtype=dtype)  # Average vertex colors for face color
@@ -98,20 +107,25 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     xy_projection = project_to_plane(mesh, 'xy', resolution)
     yz_projection = project_to_plane(mesh, 'yz', resolution)
     zx_projection = project_to_plane(mesh, 'zx', resolution)
-    zx_projection_rotated = np.rot90(zx_projection, k=-1)
-    viz_projections(xy_projection, yz_projection, zx_projection_rotated)    # Visualize the projection
+    zx_projection = np.rot90(zx_projection, k=-1)
+    # viz_projections(xy_projection, yz_projection, zx_projection)    # Visualize the projection
     # Stacking the projections to create a triplane
-    triplane = np.stack([xy_projection, yz_projection, zx_projection_rotated], axis=0)
+    triplane = np.stack([xy_projection, yz_projection, zx_projection], axis=0)
     # triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
     return triplane
 
 def model_to_triplanes(out_dir, resolution=triplane_resolution):
-    for path in subclasses_list[:5]:
+    for path in get_random_models()[:1]:
         os.makedirs(out_dir, exist_ok=True)
-        triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution)
-        # print(triplane.shape) # 3 x N x N x 3
-        np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
-        print('Done')
+        try:
+            triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution)
+            print(triplane.shape)
+            # print(triplane.shape) # 3 x N x N x 3
+            np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
+            print('Done')
+        except IndexError as e:
+            print('Skipped model:', path)
+            continue
 
 def main():
     model_to_triplanes('./images', resolution=triplane_resolution)
