@@ -1,12 +1,18 @@
 __pycache__/
 vae_weights/
+mlp_weights/
+latent_images_32/
+latent_images/
+voxel_data/
+weights/
 ldm_checkpoints
 latents/
-# generated_models/
-# generated_triplanes/
+generated_models_256/
+generated_triplanes/
 triplane_images_128/
 triplane_images_256/
 clip_images/
+metrics/
 *.png
 .env
 *.ply

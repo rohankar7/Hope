@@ -27,7 +27,7 @@ class TriplaneDataset(Dataset):
 
 def triplane_dataloader(): # Storing triplane paths in a list
     data_dir = f'./triplane_images_{config.triplane_resolution}'
-    triplane_paths = [os.path.join(data_dir, path) for path in os.listdir(data_dir)[:10]]
+    triplane_paths = [os.path.join(data_dir, path) for path in os.listdir(data_dir)]
     transform = transforms.Compose([
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -54,9 +54,9 @@ class TriplaneVoxelDataset(Dataset):
 
 def voxel_dataloader():
     voxel_dir = './voxel_data'
-    voxel_paths = [os.path.join(voxel_dir, path) for path in os.listdir(voxel_dir)[:10]  if path.endswith('.npy')]
+    voxel_paths = [os.path.join(voxel_dir, path) for path in os.listdir(voxel_dir)  if path.endswith('.npy')]
     triplane_dir = f'./triplane_images_{config.triplane_resolution}'
-    triplane_paths = [os.path.join(triplane_dir, path) for path in os.listdir(triplane_dir)[:10]]
+    triplane_paths = [os.path.join(triplane_dir, path) for path in os.listdir(triplane_dir)]
     train_img_files, valid_img_files, train_voxel_files, valid_voxel_files = train_test_split(triplane_paths, voxel_paths, test_size=0.2, random_state=42)
     train_dataset = TriplaneVoxelDataset(train_img_files, train_voxel_files)
     valid_dataset = TriplaneVoxelDataset(valid_img_files, valid_voxel_files)

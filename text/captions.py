@@ -25,24 +25,25 @@ ShapeNetCoreDescriptions = {
     'Subclass': [],
     'Caption': [],
 }
-output_file_path = './text/captions.csv'
-df = pd.read_csv('./text/descriptions.csv')
+output_file_path = './text/captions_1.csv'
+df = pd.read_csv('./text/descriptions_1.csv')
 
-for path in model_paths:
+for path in model_paths[3:4]:
     c,s = path.split('/')[2:4]
-    description = df[(df['Class']==int(c[1:])) & (df['Subclass']==s)]['Description'].iloc[0]
-    ShapeNetCoreDescriptions['Class'].append(str(c))
-    ShapeNetCoreDescriptions['Subclass'].append(str(s))
-    response = client.chat.completions.with_raw_response.create(
-        messages=[{
-            "role": "user", "content": get_prompt(str(description)),
-        }],
-        model="gpt-4o-mini",
-        temperature=0,
-    )
-    completion = response.parse()
-    caption = str(completion.choices[0].message.content)
-    ShapeNetCoreDescriptions['Caption'].append(caption)
+    descriptions = df[(df['Class']==int(c[1:])) & (df['Subclass']==s)]['Description'].to_list()
+    for desc in descriptions:
+        ShapeNetCoreDescriptions['Class'].append(str(c))
+        ShapeNetCoreDescriptions['Subclass'].append(str(s))
+        response = client.chat.completions.with_raw_response.create(
+            messages=[{
+                "role": "user", "content": get_prompt(str(desc)),
+            }],
+            model="gpt-4o-mini",
+            temperature=0,
+        )
+        completion = response.parse()
+        caption = str(completion.choices[0].message.content)
+        ShapeNetCoreDescriptions['Caption'].append(caption)
 
 caption_df = pd.DataFrame(ShapeNetCoreDescriptions)
 caption_df.to_csv(output_file_path, index=False)

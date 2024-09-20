@@ -1,5 +1,5 @@
-# NOTE: This is a Blender script and should be run with Blender
-# Import the required libraries
+# # NOTE: This is a Blender script and should be run with Blender
+# # Import the required libraries
 import os
 import bpy
 import math
@@ -69,15 +69,16 @@ data_dir = 'C:/ShapeNetCore'
 def extract_models(shapenet_directory):
     model_list = []
     for category in os.listdir(shapenet_directory):
-        category_directory = os.path.join(shapenet_directory, category)
+        category_directory = f'{shapenet_directory}/{category}'
         if os.path.isdir(category_directory):
             for models in os.listdir(category_directory):
-                model_directory = os.path.join(category_directory, models, 'models/model_normalized.obj')
+                model_directory = f'{category_directory}/{models}/models/model_normalized.obj'
+                # model_directory = os.path.join(category_directory, models, 'models/model_normalized.obj')
                 if os.path.isfile(model_directory):
                     model_list.append(model_directory)
     return model_list
 model_paths = extract_models(data_dir)
-# print(len(model_paths))
+print(model_paths)
 
 # Loop to generate 10 images for each 3D model
 for path in model_paths:
@@ -162,7 +163,7 @@ for path in model_paths:
             category_dir = '/'.join(path.split('/')[0:3])
             
             # Define the images directory as ShapeNetCoreImages
-            directory = f'C:/ShapeNetCoreImages'
+            directory = f'C:/ShapeImages'
             os.makedirs(directory, exist_ok=True)
             
             # Create the category directory

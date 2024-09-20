@@ -7,19 +7,19 @@ from sklearn.manifold import TSNE
 from ast import literal_eval
 import plotly.graph_objects as go
 
-df = pd.read_csv('./captions.csv')
+df = pd.read_csv('./text/fusion.csv')
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 embedding_model = "text-embedding-3-small"
 def get_embedding(text, model=embedding_model):
    text = text.replace("\n", " ")
    return client.embeddings.create(input = [text], model=model).data[0].embedding
-embedding_dir = './embedding.csv'
+embedding_dir = './text/embedding_1.csv'
 df['Embedding'] = df['Caption'].apply(lambda x: get_embedding(x, model='text-embedding-3-small'))
 df.to_csv(embedding_dir, index=False)
 
 # 3D plotting
-datafile_path = "embedding_dir"
+datafile_path = embedding_dir
 df = pd.read_csv(datafile_path)
 subclasses = df['Subclass']
 matrix = np.array(df['Embedding'].apply(literal_eval).to_list())

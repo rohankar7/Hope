@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 from data_loader import voxel_dataloader
-import trimesh
 import matplotlib.pyplot as plt
 import os
+from tqdm import tqdm
 
 def plot_voxel(voxel_data):
     from mpl_toolkits.mplot3d import Axes3D
@@ -39,22 +40,25 @@ class TriplaneMLP(nn.Module):
         return x.view(-1, 64, 64, 64)
 
 def train_val_mlp():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     input_dim = 3*128*128*3
     output_dim = 64*64*64
     model = TriplaneMLP(input_dim, output_dim)
+    model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.BCELoss()
     voxel_train_dataloader, voxel_val_dataloader = voxel_dataloader()
     weights_dir = './mlp_weights'
     os.makedirs(weights_dir, exist_ok=True)
-    # Training loop
-    num_epochs = 10
+    # Training
+    num_epochs = 100
     for epoch in range(num_epochs):
-        # Training
         model.train()
         training_loss = 0.0
         for features, targets in voxel_train_dataloader:
             optimizer.zero_grad()
+            features = features.to(device)
+            targets = targets.to(device)
             outputs = model(features)
             loss = criterion(outputs, targets)
             loss.backward()
@@ -68,6 +72,8 @@ def train_val_mlp():
         validation_loss = 0
         with torch.no_grad():
             for features, targets in voxel_val_dataloader:
+                features = features.to(device)
+                targets = targets.to(device)
                 outputs = model(features)
                 loss = criterion(outputs, targets)
                 validation_loss += loss.item()

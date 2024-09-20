@@ -1,4 +1,4 @@
-
+# Text to 3D Model Generation using Diffusion Techniques
 
 ## Methodology
 
@@ -6,7 +6,8 @@
 1) Run ./blender_captions.py: This will render 8 holistic images of every 3D model and save it locally
 2) Run ./text/descriptions.py: This will generate and store text descriptions of the images rendered using Blender
 3) Run ./text/captions.py: This will simplify the generated descriptions into captions
-4) Run ./text/embeddings.py: This will generate text embeddings from captions and store them
+4) Run ./text/fusion.py: This will fuse the simplified captions into a single descriptive caption
+5) Run ./text/embeddings.py: This will generate text embeddings from captions and store them
 
 ### Tri-plane Ganeration and Fitting
 1) Run triplane.py: This will generate and store tri-plane representations

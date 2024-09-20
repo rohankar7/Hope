@@ -27,10 +27,12 @@ def extract_images_of_models(folder_path, output_dir):
                     inputs = processor(prompt, image, return_tensors="pt").to(device)
                     torch.cuda.empty_cache()
                     output = model.generate(**inputs, max_new_tokens=100)
-                    row = {'Class': f'{classes}', 'Subclasses': f'{models}', 'Description': f'{str(processor.decode(output[0], skip_special_tokens=True))[73:]}'}
+                    print(str(processor.decode(output[0], skip_special_tokens=True)))
+                    row = (classes, models, str(processor.decode(output[0], skip_special_tokens=True))[73:])
+                    # row = {'Class': f'{classes}', 'Subclasses': f'{models}', 'Description': f'{str(processor.decode(output[0], skip_special_tokens=True))[73:]}'}
                     writer.writerow(row)
                 torch.cuda.empty_cache()
 
-images_pwd = 'C:/Project/GPTImages'
-output_dir = './text/descriptions.csv'
+images_pwd = 'C:/ShapeImages'
+output_dir = './text/descriptions_1.csv'
 images = extract_images_of_models(images_pwd, output_dir)
