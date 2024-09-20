@@ -6,8 +6,7 @@ from ShapeNetCore import *
 import os
 import config
 
-# triplane_resolution = config.triplane_resolution
-triplane_resolution = 32
+triplane_resolution = config.triplane_resolution
 dtype = np.float32
 
 def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolution):
@@ -121,7 +120,6 @@ def model_to_triplanes(out_dir):
         os.makedirs(out_dir, exist_ok=True)
         try:
             triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution)
-            print(path)
             # Triplane shape: 3 x N x N x 3
             np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
             print('Saved triplane')

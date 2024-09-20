@@ -17,6 +17,7 @@ def create_voxel_grid():
     output_dir = './voxel_data'
     os.makedirs(output_dir, exist_ok=True)
     for path in sorted(os.listdir(f'./triplane_images_{config.triplane_resolution}')):
+        path = '/'.join(path.split('.')[0].split('_'))
         mesh_path = f'{config.pwd}/{path}/{config.suffix_dir}'
         mesh = trimesh.load(mesh_path, force='mesh')
         pitch_val = mesh.extents.max() / (voxel_resolution - 1)
