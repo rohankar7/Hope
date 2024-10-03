@@ -26,8 +26,7 @@ class TriplaneDataset(Dataset):
         return torch.stack([xy_plane, yz_plane, zx_plane], dim=0)
 
 def triplane_dataloader(): # Storing triplane paths in a list
-    data_dir = f'./triplane_images_{config.triplane_resolution}'
-    triplane_paths = [os.path.join(data_dir, path) for path in os.listdir(data_dir)]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50]]
     transform = transforms.Compose([
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -46,17 +45,17 @@ class TriplaneVoxelDataset(Dataset):
         return len(self.image_paths)
     def __getitem__(self, idx):
         # TODO: flatten the image
-        triplane_image = np.load(self.image_paths[idx]).astype(np.float32) 
-        flattened_image = torch.tensor(triplane_image.reshape(3 * 128 * 128 * 3), dtype=torch.float32)
+        triplane_image = np.load(self.image_paths[idx]).astype(np.float32)
+        res = config.triplane_resolution
+        flattened_image = torch.tensor(triplane_image.reshape(3 * res * res * config.triplane_features), dtype=torch.float32)
         voxel_grid = np.load(self.voxel_paths[idx]).astype(np.float32)
         voxel_grid = torch.tensor(voxel_grid, dtype=torch.float32)
         return flattened_image, voxel_grid
 
 def voxel_dataloader():
-    voxel_dir = './voxel_data'
-    voxel_paths = [os.path.join(voxel_dir, path) for path in os.listdir(voxel_dir)  if path.endswith('.npy')]
-    triplane_dir = f'./triplane_images_{config.triplane_resolution}'
-    triplane_paths = [os.path.join(triplane_dir, path) for path in os.listdir(triplane_dir)]
+    voxel_dir = f'./voxel_data_{config.voxel_resolution}'
+    voxel_paths = [os.path.join(voxel_dir, path) for path in os.listdir(voxel_dir)[:50] if path.endswith('.npy')]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50]]
     train_img_files, valid_img_files, train_voxel_files, valid_voxel_files = train_test_split(triplane_paths, voxel_paths, test_size=0.2, random_state=42)
     train_dataset = TriplaneVoxelDataset(train_img_files, train_voxel_files)
     valid_dataset = TriplaneVoxelDataset(valid_img_files, valid_voxel_files)
@@ -74,8 +73,7 @@ class LatentDataset(Dataset):
         return torch.load(latent_path)
 
 def latent_dataloader(): # Storing latent paths in a list
-    latent_dir = f'./latent_images_{config.triplane_resolution}'
-    latents = [f'{latent_dir}/{latents}' for latents in os.listdir(latent_dir)]
+    latents = [f'{config.latent_dir}/{latents}' for latents in os.listdir(config.latent_dir)]
     dataset = LatentDataset(latents)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=shuffle_condition)
     return dataloader # Returns latents in the shape of (batch_size, 3, 1, 32, 32)

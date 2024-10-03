@@ -9,12 +9,16 @@ from skimage.morphology import binary_closing, binary_opening, disk
 from scipy.ndimage import binary_erosion, binary_dilation, binary_closing
 from ldm import UNetWithCrossAttention
 from vae import VAE
-from triplane import triplane_resolution
 from ldm import *
+import math
 import config
 from mlp import TriplaneMLP
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = 'cpu'
+# from skimage import measure
+import mcubes
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+triplane_res = config.triplane_resolution
+voxel_res = config.voxel_resolution
 # Additional file formats
 # mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=(rgb_final * 255).astype(np.uint8))
 #     if save_name:
@@ -74,7 +78,7 @@ def extract_colors(triplane, vertices, faces, resolution):
         face_colors[i] = np.mean(vertex_colors[face], axis=0) * 255
     return vertex_colors, face_colors
 
-def generate_mesh(triplane, zx_projection, resolution=triplane_resolution):
+def generate_mesh(triplane, zx_projection, resolution=triplane_res):
     # xy_projection = triplane[0][:, :, 0] * triplane[0][:, :, 3]
     # yz_projection = triplane[1][:, :, 0] * triplane[1][:, :, 3]
     xy_projection = triplane[0][:, :, 0]
@@ -131,29 +135,43 @@ def correct_rotation(triplane, resolution):
                 print("No surface found at the given iso value")
     return
 
+def create_mesh_from_voxel(mlp_voxel):
+    # mlp_voxel = mlp_voxel.squeeze().numpy()
+    threshold = 0.5
+    voxel_grid_binary = (mlp_voxel > threshold).int()
+    voxel_grid_np = voxel_grid_binary.squeeze().numpy()
+    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
+    return mesh
+    # vertices, faces, normals, values = measure.marching_cubes(mlp_voxel)
+    # mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_normals=normals, face_normals=values)
+    # vertices, triangles = mcubes.marching_cubes(mlp_voxel, 0.5)
+    # vertices = vertices / (256 - 1.0) * 2 - 1
+    # mesh = trimesh.Trimesh(vertices, triangles)
+    # return mesh
+
 def mesh_from_mlp(triplane):
-    model = TriplaneMLP(3*128*128*3, 64*64*64)
-    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_10.pth'))
+    triplane_in_dim = 3 * triplane_res * triplane_res * config.triplane_features
+    voxel_out_dim = voxel_res * voxel_res * voxel_res
+    model = TriplaneMLP(triplane_in_dim, voxel_out_dim)
+    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_50.pth'))
     model.eval()
     with torch.no_grad():
-        input_tensor = torch.tensor(triplane.reshape(3 * 128 * 128 * 3), dtype=torch.float32)
+        input_tensor = torch.tensor(triplane.reshape(triplane_in_dim), dtype=torch.float32)
         output = model(input_tensor)
-        threshold = 0.5
-        voxel_grid_binary = (output > threshold).int()
-        voxel_grid_np = voxel_grid_binary.squeeze().numpy() 
-        mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
+        mesh = create_mesh_from_voxel(output)
         mesh = repair_mesh(mesh)
         mesh.show()
     return mesh
 
-def model_from_triplanes(output_dir, resolution):
-    for np_triplane in os.listdir(output_dir):
+def model_from_triplanes(output_dir):
+    for np_triplane in os.listdir(output_dir)[:10]:
         triplane = np.load(os.path.join(output_dir, np_triplane))
         # mesh = mesh_from_triplanes(triplane)
-        mesh = correct_rotation(triplane, resolution)
+        # mesh = correct_rotation(triplane, resolution)
         mesh = mesh_from_mlp(triplane)
         model_gen_dir = './generated_models'
         os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(model_gen_dir, exist_ok=True)
         mesh.export(f"{model_gen_dir}/{np_triplane.split('.')[0]}.ply")
         print('Exported')
 
@@ -191,15 +209,16 @@ def decode_latent_triplanes(latent_triplanes):
 
 def main():
     triplane_savedir = './generated_triplanes'
-    text = 'A white aeroplane with red wings'
-    coarse_latent_data = generate_from_text(text)
-    # print(coarse_latent_data.shape)
-    coarse_triplanes = decode_latent_triplanes(coarse_latent_data).cpu().detach().numpy()
-    coarse_triplanes = coarse_latent_data.cpu().detach().numpy()
-    np.save(f"{triplane_savedir}/{'output'}.npy", coarse_triplanes)
+    triplane_savedir = f'./triplane_images_{triplane_res}'
+    # text = 'A white aeroplane with red wings'
+    # coarse_latent_data = generate_from_text(text)
+    # # print(coarse_latent_data.shape)
+    # coarse_triplanes = decode_latent_triplanes(coarse_latent_data).cpu().detach().numpy()
+    # coarse_triplanes = coarse_latent_data.cpu().detach().numpy()
+    # np.save(f"{triplane_savedir}/{'output'}.npy", coarse_triplanes)
 
     # triplane_savedir = './triplane_images_128'
-    model_from_triplanes(triplane_savedir, resolution=config.triplane_resolution)
+    model_from_triplanes(triplane_savedir)
 
 if __name__ == "__main__":
     main()

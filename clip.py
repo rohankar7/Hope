@@ -10,10 +10,8 @@ import torch.nn.functional as F
 def render_generated_models():
     out_dir = './clip_images'
     os.makedirs(out_dir, exist_ok=True)
-    generated_models_dir = f'./generated_models_{config.triplane_resolution}'
-    generated_models_dir = f'./generated_models_256'
-    for paths in os.listdir(generated_models_dir):
-        mesh = pv.read(f'{generated_models_dir}/{paths}')
+    for paths in os.listdir(config.generation_dir):
+        mesh = pv.read(f'{config.generation_dir}/{paths}')
 
         mesh.set_active_scalars('RGBA')
         print(mesh.array_names) 

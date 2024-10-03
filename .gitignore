@@ -3,14 +3,16 @@ vae_weights/
 mlp_weights/
 latent_images_32/
 latent_images/
-voxel_data/
+voxel_data_*/
 weights/
 ldm_checkpoints
 latents/
+generated_models/
 generated_models_256/
 generated_triplanes/
-triplane_images_128/
-triplane_images_256/
+triplane_images_*/
+# triplane_images_256/
+voxels/
 clip_images/
 metrics/
 *.png
@@ -18,3 +20,7 @@ metrics/
 *.ply
 *.npy
 *.pth
+haha.py
+new.py
+vae_1.py
+view.py

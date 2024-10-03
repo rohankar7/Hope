@@ -3,6 +3,7 @@ import trimesh
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
 from ShapeNetCore import *
+from Model_List import model_paths
 import os
 import config
 
@@ -100,7 +101,11 @@ def viz_projections(xy_projection, yz_projection, zx_projection):
 
 def generate_triplanes(file_path, resolution=triplane_resolution):
     mesh = trimesh.load(file_path, force='mesh')
-    mesh.visual = mesh.visual.to_color()
+    try:
+        mesh.visual = mesh.visual.to_color()
+    except (IndexError, AttributeError) as e:
+        print('Skipped model:', file_path)
+        return None
     # Stacking the SDF values for each projection
     # sdf_grid = compute_sdf(mesh)
     # sdf_reshaped = sdf_grid[:, :, :, np.newaxis]
@@ -116,20 +121,20 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     return triplane
 
 def model_to_triplanes(out_dir):
-    for path in get_random_models():
+    for path in sorted(model_paths):
         os.makedirs(out_dir, exist_ok=True)
-        try:
-            triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution)
-            # Triplane shape: 3 x N x N x 3
-            np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
-            print('Saved triplane')
-        except IndexError as e:
-            print('Skipped model:', path)
+        path = '/'.join(path.split('/')[2:4])
+        triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution)
+        if triplane is None:
             continue
+        # Triplane shape: 3 x N x N x 3
+        np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
+        print('Saved triplane')
 
 def main():
     print('Main function: Triplane')
-    model_to_triplanes(f'./triplane_images_{triplane_resolution}')
+    model_to_triplanes(config.triplane_dir)
+    # model_to_triplanes(f'./triplane_images_{triplane_resolution}')
 
 if __name__ == "__main__":
     main()
