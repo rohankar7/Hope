@@ -15,7 +15,7 @@ num_channels = 3
 hidden_dim_1 = 6
 # hidden_dim_2 = 12
 latent_channels_dim = 12
-weights_dir = 'weights_24'
+weights_dir = 'weights_aeroplanes copy'
 num_planes= 3
 
 class VAE(nn.Module):
@@ -84,7 +84,7 @@ def vae_loss(recon_x, x, mu, logvar, epoch, num_epochs):
     mse = F.mse_loss(recon_x, x, reduction='mean')
     kld = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     # beta = min(1.0, epoch / (num_epochs * 0.3))  # Increase beta over the first 30% of epochs
-    beta = 1e-8 * 0
+    beta = 1e-5
     # beta = 1 * 0
     # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
     lambda_tvl = 1e-2
@@ -100,11 +100,12 @@ def train_vae():
     save_path = './vae_weights'
     os.makedirs(save_path, exist_ok=True)
     vae = VAE().to(device)
-    patience = 1000
+    patience = 50
     early_stopping_patirnce = patience
     # optimizer = optim.Adam(vae.parameters(), lr=1e-3, weight_decay=1e-5)
     # optimizer = optim.Adam(vae.parameters(), lr=5e-4)
     optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
+    # optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999))
     # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
     # scheduler = ReduceLROnPlateau(optimizer, 'min')
     num_epochs = 50 * 20

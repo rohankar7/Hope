@@ -15,7 +15,7 @@ num_channels = 3
 hidden_dim_1 = 6
 # hidden_dim_2 = 12
 latent_channels_dim = 12
-weights_dir = 'weights_24'
+weights_dir = 'weights_aeroplanes'
 num_planes= 3
 
 class VAE(nn.Module):
@@ -84,10 +84,10 @@ def vae_loss(recon_x, x, mu, logvar, epoch, num_epochs):
     mse = F.mse_loss(recon_x, x, reduction='mean')
     kld = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     # beta = min(1.0, epoch / (num_epochs * 0.3))  # Increase beta over the first 30% of epochs
-    beta = 1e-8 * 0
+    beta = 1e-5 * 0
     # beta = 1 * 0
     # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
-    lambda_tvl = 1e-2
+    lambda_tvl = 1e-4
     tvl = tv_loss(recon_x)
     return mse + (beta * kld) + (lambda_tvl * tvl)
 
@@ -100,14 +100,16 @@ def train_vae():
     save_path = './vae_weights'
     os.makedirs(save_path, exist_ok=True)
     vae = VAE().to(device)
-    patience = 1000
-    early_stopping_patirnce = patience
+    patience = 500
+    early_stopping_patirnce = 0
     # optimizer = optim.Adam(vae.parameters(), lr=1e-3, weight_decay=1e-5)
     # optimizer = optim.Adam(vae.parameters(), lr=5e-4)
-    optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
+    # optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
+    optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999))
     # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
     # scheduler = ReduceLROnPlateau(optimizer, 'min')
-    num_epochs = 50 * 20
+    num_epochs = 50 * 10
+    config = None
     scheduler = LambdaLR(optimizer, lr_lambda= lambda epoch: lr_scheduler_func(epoch, num_epochs))
     best_loss = torch.inf
     for epoch in range(num_epochs):
@@ -129,16 +131,19 @@ def train_vae():
         print(f'Epoch {epoch+1}, Loss: {loss_avg}, LR: {scheduler.get_last_lr()}')
         if best_loss > loss_avg:
             best_loss = loss_avg
-            torch.save({
+            config = {
                 'epoch': epoch,
                 'model_state_dict': vae.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'loss': loss_avg,
-            }, f'{save_path}/{weights_dir}.pth')
-            early_stopping_patirnce = patience
-        else: early_stopping_patirnce -= 1
-        if early_stopping_patirnce < 0: break
+            }
+            early_stopping_patirnce = 0
+        else:
+            early_stopping_patirnce += 1
+            if early_stopping_patirnce == patience: break
+        if (epoch + 1) % 10 == 0:
+            torch.save(config, f'{save_path}/{weights_dir}.pth')
 
 def load_vae_checkpoint():
     vae = VAE().to(device)
@@ -178,7 +183,7 @@ def save_latent_representation():
 
 def main():
     print('Main function: VAE')
-    # train_vae()
+    train_vae()
     save_latent_representation()
 
 if __name__ == '__main__':

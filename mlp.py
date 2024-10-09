@@ -27,12 +27,12 @@ class TriplaneMLP(nn.Module):
         
     def forward(self, x):
         x = self.mlp_layers(x)
-        return x.view(-1, voxel_res, voxel_res, voxel_res)
+        return x.view(-1, voxel_res, voxel_res, voxel_res, 3)
 
 def train_val_mlp():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     input_dim = 3 * triplane_res * triplane_res * config.triplane_features
-    output_dim = voxel_res * voxel_res * voxel_res
+    output_dim = voxel_res * voxel_res * voxel_res * 3
     model = TriplaneMLP(input_dim, output_dim)
     model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)

@@ -26,7 +26,7 @@ class TriplaneDataset(Dataset):
         return torch.stack([xy_plane, yz_plane, zx_plane], dim=0)
 
 def triplane_dataloader(): # Storing triplane paths in a list
-    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50]]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:]]
     transform = transforms.Compose([
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])

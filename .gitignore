@@ -21,6 +21,6 @@ metrics/
 *.npy
 *.pth
 haha.py
-new.py
+# new.py
 vae_1.py
 view.py

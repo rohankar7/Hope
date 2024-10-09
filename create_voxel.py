@@ -23,6 +23,8 @@ def create_voxel_grid():
         path = '/'.join(path.split('.')[0].split('_'))
         mesh_path = f'{config.pwd}/{path}/{config.suffix_dir}'
         mesh = trimesh.load(mesh_path, force='mesh')
+        if mesh.visual.material:
+            print(mesh.visual.material)
         pitch_val = mesh.extents.max() / (voxel_res - 1)
         voxel_grid = mesh.voxelized(pitch = pitch_val)
         voxel_data = voxel_grid.matrix

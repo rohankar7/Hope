@@ -242,7 +242,8 @@ def train():
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': epoch_loss / len(latent_data),
             }, checkpoint_path)
 
 def main():
