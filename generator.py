@@ -13,6 +13,7 @@ from ldm import *
 import math
 import config
 from mlp import TriplaneMLP
+from create_voxel import visualize_voxel
 # from skimage import measure
 import mcubes
 
@@ -58,26 +59,83 @@ def repair_mesh(mesh):
     mesh.update_faces(mesh.unique_faces())  # Remove duplicate vertices
     return mesh
 
-
+# 2, 5
 def create_mesh_from_voxel(mlp_voxel):
-    # mlp_voxel = mlp_voxel.squeeze().numpy()
     threshold = 0.5
-    voxel_grid_binary = (mlp_voxel > threshold).int()
-    voxel_grid_np = voxel_grid_binary.squeeze().numpy()
-    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
-    return mesh
+    # visualize_voxel(mlp_voxel.squeeze().numpy(), threshold=threshold)
+    visualize_voxel(mlp_voxel, threshold=threshold)
+    # mlp_voxel = torch.sum(mlp_voxel, axis=3)
+    # voxel_grid_binary = (mlp_voxel > threshold).int()
+    # voxel_grid_np = voxel_grid_binary.squeeze().numpy()
+    # mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
+    # vertex_indices = mesh.vertices.astype(int)
+    # vertex_indices = np.clip(vertex_indices, 0, np.array(voxel_grid_np.shape[:3]) - 1)
+    # vertex_colors = voxel_grid_np[vertex_indices[:, 0], vertex_indices[:, 1], vertex_indices[:, 2], :]
+    # if vertex_colors.max() <= 1.0:
+    #     vertex_colors = vertex_colors * 255.0
+    # mesh.visual.vertex_colors = vertex_colors
+    # return mesh
+    # from scipy.ndimage import gaussian_filter
+    # # mlp_voxel = mlp_voxel.cpu().numpy()
+    # # mlp_voxel = gaussian_filter(mlp_voxel, sigma=1)
     # vertices, faces, normals, values = measure.marching_cubes(mlp_voxel)
     # mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_normals=normals, face_normals=values)
+    # mesh.show()
+    # return mesh
     # vertices, triangles = mcubes.marching_cubes(mlp_voxel, 0.5)
     # vertices = vertices / (256 - 1.0) * 2 - 1
     # mesh = trimesh.Trimesh(vertices, triangles)
     # return mesh
+    # voxel_grid_np = mlp_voxel.squeeze().numpy()  # Assuming shape (N, N, N, 3)
+    # import scipy
+    # upscale_factor = 2
+    voxel_grid_np = mlp_voxel
+    # voxel_grid_grayscale = np.max(voxel_grid_np, axis=3)
+    voxel_grid_binary = (voxel_grid_np > threshold).astype(int)
+    # voxel_grid_np = scipy.ndimage.zoom(voxel_grid_binary, upscale_factor, order=1)
+    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_binary)
+    # subdivided_mesh = mesh.subdivide()
+
+    # If needed, repeat subdivision multiple times to increase smoothness
+    # for _ in range(10):  # Apply subdivision multiple times for smoother results
+        # subdivided_mesh = subdivided_mesh.subdivide()
+
+    mesh.show()
+    return mesh
+    # voxel_object = trimesh.voxel.VoxelGrid(voxel_grid_binary)
+    # mesh = voxel_object.marching_cubes
+    vertex_indices = mesh.vertices.astype(np.uint8)
+    vertex_indices = np.clip(vertex_indices, 0, np.array(voxel_grid_np.shape[:3]) - 1)
+    vertex_colors = voxel_grid_np[vertex_indices[:, 0], vertex_indices[:, 1], vertex_indices[:, 2], :]
+    if vertex_colors.max() > 1.0:
+        vertex_colors = vertex_colors / 255.0
+    mesh.visual.vertex_colors = vertex_colors
+    face_centroids = mesh.triangles_center.astype(int)
+
+    # Ensure indices are within the voxel grid bounds
+    face_centroids = np.clip(face_centroids, 0, np.array(voxel_grid_np.shape[:3]) - 1)
+
+    # Extract the RGB values for each face based on the centroids
+    face_colors = voxel_grid_np[face_centroids[:, 0], face_centroids[:, 1], face_centroids[:, 2], :]
+
+    # Normalize the colors to [0, 255] for trimesh compatibility if they are in [0, 1]
+    if face_colors.max() <= 1.0:
+        face_colors = (face_colors * 255).astype(np.uint8)
+
+    # Add alpha channel to make RGBA colors
+    alpha_channel = np.full((face_colors.shape[0], 1), 255, dtype=np.uint8)  # Alpha value of 255 (fully opaque)
+    face_colors = np.hstack([face_colors, alpha_channel])  # Combine RGB with Alpha to form RGBA
+
+    # Assign the face colors to the mesh
+    mesh.visual.face_colors = face_colors
+
+    return mesh
 
 def mesh_from_mlp(triplane):
     triplane_in_dim = 3 * triplane_res * triplane_res * config.triplane_features
-    voxel_out_dim = voxel_res * voxel_res * voxel_res
+    voxel_out_dim = voxel_res * voxel_res * voxel_res * 3
     model = TriplaneMLP(triplane_in_dim, voxel_out_dim)
-    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_50.pth'))
+    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_80.pth'))
     model.eval()
     with torch.no_grad():
         input_tensor = torch.tensor(triplane.reshape(triplane_in_dim), dtype=torch.float32)

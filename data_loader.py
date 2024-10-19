@@ -26,7 +26,7 @@ class TriplaneDataset(Dataset):
         return torch.stack([xy_plane, yz_plane, zx_plane], dim=0)
 
 def triplane_dataloader(): # Storing triplane paths in a list
-    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:]]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:1]]
     transform = transforms.Compose([
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -53,9 +53,8 @@ class TriplaneVoxelDataset(Dataset):
         return flattened_image, voxel_grid
 
 def voxel_dataloader():
-    voxel_dir = f'./voxel_data_{config.voxel_resolution}'
-    voxel_paths = [os.path.join(voxel_dir, path) for path in os.listdir(voxel_dir)[:50] if path.endswith('.npy')]
-    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50]]
+    voxel_paths = [os.path.join(config.voxel_dir, path) for path in os.listdir(config.voxel_dir)[:50] if path.endswith('.npy')]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50] if path.endswith('.npy')]
     train_img_files, valid_img_files, train_voxel_files, valid_voxel_files = train_test_split(triplane_paths, voxel_paths, test_size=0.2, random_state=42)
     train_dataset = TriplaneVoxelDataset(train_img_files, train_voxel_files)
     valid_dataset = TriplaneVoxelDataset(valid_img_files, valid_voxel_files)

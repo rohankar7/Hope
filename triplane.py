@@ -6,6 +6,7 @@ from ShapeNetCore import *
 from Model_List import model_paths
 import os
 import config
+from tqdm import tqdm
 
 triplane_resolution = config.triplane_resolution
 dtype = np.float32
@@ -41,19 +42,16 @@ def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolut
     return sdf_values
 
 def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
-    # Create a grid to store the projection and RGB colors
+    # Creating a grid to hold the projection and RGB colors
     grid = np.zeros((resolution, resolution, 3), dtype=dtype)
-    count_grid = np.zeros((resolution, resolution, 1), dtype=dtype)  # To average colors
+    count_grid = np.zeros((resolution, resolution, 1), dtype=dtype)  # Averaging the colors
     bounds = mesh.bounds
     min_bound = bounds[0]
     max_bound = bounds[1]
-    # Calculate the scaling factor to fit the mesh within the resolution
-    scale = (resolution) / (max_bound - min_bound).max()
-    # Scale the vertices to fit in the grid while preserving aspect ratios
+    scale = (resolution) / (max_bound - min_bound).max() # Calculating the scaling factor to fit the mesh within the resolution
     vertices = mesh.vertices.copy()
-    vertices = (vertices - min_bound) * scale
-    # Center the vertices in the grid
-    center_offset = (resolution - (vertices.max(axis=0) + vertices.min(axis=0))) / 2
+    vertices = (vertices - min_bound) * scale # Scaling the vertices to fit in the grid while preserving aspect ratios
+    center_offset = (resolution - (vertices.max(axis=0) + vertices.min(axis=0))) / 2 # Centering the vertices in the grid
     if plane == 'xy':
         vertices[:, :2] += center_offset[:2]
     elif plane == 'yz':
@@ -61,10 +59,8 @@ def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
     elif plane == 'zx':
         vertices[:, [2, 0]] += center_offset[[2, 0]]
 
-    # Ensure vertices are within the grid
-    vertices = np.clip(vertices, 0, resolution - 1).astype(float)
-    # Normalising colours
-    vertex_colors = mesh.visual.vertex_colors[:, :3] / 255.0  # Normalize colours
+    vertices = np.clip(vertices, 0, resolution - 1).astype(float) # Ensuring that the vertices are within the grid
+    vertex_colors = mesh.visual.vertex_colors[:, :3] / 255.0  # Normalizing the colours
     # face_colors = mesh.visual.face_colors[:, :3] / 255.0
     for face in mesh.faces:
         tri = vertices[face]
@@ -84,56 +80,55 @@ def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
     grid = (grid / count_grid).astype(dtype)  # Averaging the colors
     return grid
 
-def viz_projections(xy_projection, yz_projection, zx_projection):
-    # Visualizing projections
-    cmap = 'viridis'   # Choosing 'gray' or 'viridis'
+def viz_projections(triplane, file_name):
+    cmap = 'viridis'   # or 'gray'
     plt.figure(figsize=(15, 5))
     plt.subplot(1, 3, 1)
     plt.title('XY Projection')
-    plt.imshow(xy_projection, cmap=cmap)
+    plt.imshow(triplane[0], cmap=cmap)
     plt.subplot(1, 3, 2)
     plt.title('YZ Projection')
-    plt.imshow(yz_projection, cmap=cmap)
+    plt.imshow(triplane[1], cmap=cmap)
     plt.subplot(1, 3, 3)
     plt.title('ZX Projection')
-    plt.imshow(zx_projection, cmap=cmap)
-    plt.show() 
+    plt.imshow(triplane[2], cmap=cmap)
+    # plt.savefig(f'./assets/' + file_name)
+    plt.show()
 
 def generate_triplanes(file_path, resolution=triplane_resolution):
     mesh = trimesh.load(file_path, force='mesh')
     try:
         mesh.visual = mesh.visual.to_color()
     except (IndexError, AttributeError) as e:
-        print('Skipped model:', file_path)
+        # print('Skipped model:', file_path)
         return None
-    # Stacking the SDF values for each projection
     # sdf_grid = compute_sdf(mesh)
     # sdf_reshaped = sdf_grid[:, :, :, np.newaxis]
-    # Generate binary projections
+    # Generating binary projections
     xy_projection = project_to_plane(mesh, 'xy', resolution)
     yz_projection = project_to_plane(mesh, 'yz', resolution)
     zx_projection = project_to_plane(mesh, 'zx', resolution)
     zx_projection = np.rot90(zx_projection, k=-1)
-    # viz_projections(xy_projection, yz_projection, zx_projection)    # Visualize the projection
-    # Stacking the projections to create a triplane
-    triplane = np.stack([xy_projection, yz_projection, zx_projection], axis=0)
+    triplane = np.stack([xy_projection, yz_projection, zx_projection], axis=0) # Stacking the projections to create a triplane
     # triplane = np.concatenate((triplane, sdf_reshaped), axis=-1)
     return triplane
 
-def model_to_triplanes(out_dir):
-    for path in sorted(model_paths):
-        os.makedirs(out_dir, exist_ok=True)
-        path = '/'.join(path.split('/')[2:4])
-        triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution)
+def model_to_triplanes():
+    os.makedirs(config.triplane_dir, exist_ok=True)
+    for path in tqdm(sorted(get_random_models()), desc=f"Progress"):
+        file_name = '_'.join(path.split('/')) + '.npy'
+        if file_name in os.listdir(config.triplane_dir):
+            continue
+        # path = '/'.join(path.split('/')[2:4])
+        triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution) # Triplane shape: 3 x N x N x 3
         if triplane is None:
             continue
-        # Triplane shape: 3 x N x N x 3
-        np.save(f"{out_dir}/{'_'.join(path.split('/'))}.npy", triplane)
-        print('Saved triplane')
+        # viz_projections(triplane, file_name)    # Visualizing the projection
+        np.save(f"{config.triplane_dir}/{file_name}", triplane)
 
 def main():
     print('Main function: Triplane')
-    model_to_triplanes(config.triplane_dir)
+    model_to_triplanes()
     # model_to_triplanes(f'./triplane_images_{triplane_resolution}')
 
 if __name__ == "__main__":

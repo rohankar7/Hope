@@ -3,7 +3,7 @@
 ## Methodology
 
 ### Preparing the Dataset
-1) Run ./blender_captions.py: This will render 8 holistic images of every 3D model and save it locally
+1) Run ./blender/blender_captions.py: This will render 8 holistic images of every 3D model and save it locally
 2) Run ./text/descriptions.py: This will generate and store text descriptions of the images rendered using Blender
 3) Run ./text/captions.py: This will simplify the generated descriptions into captions
 4) Run ./text/fusion.py: This will fuse the simplified captions into a single descriptive caption

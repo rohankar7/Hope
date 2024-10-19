@@ -15,7 +15,7 @@ num_channels = 3
 hidden_dim_1 = 6
 # hidden_dim_2 = 12
 latent_channels_dim = 12
-weights_dir = 'weights_aeroplanes_2'
+weights_dir = 'weights_aeroplanes_2_250'
 num_planes= 3
 
 class VAE(nn.Module):
@@ -91,7 +91,7 @@ def vae_loss(recon_x, x, mu, logvar, epoch, num_epochs):
     tvl = tv_loss(recon_x)
     return mse + (beta * kld) + (lambda_tvl * tvl)
 
-def lr_scheduler_func(epoch, num_epochs, warmup_epochs=5, min_lr=3e-4):
+def lr_scheduler_func(epoch, num_epochs, warmup_epochs=5, min_lr=1e-4):
     if epoch < warmup_epochs: return float(epoch / warmup_epochs)
     else: return min_lr + 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
     # return 1e-2
@@ -105,7 +105,7 @@ def train_vae():
     # optimizer = optim.Adam(vae.parameters(), lr=1e-3, weight_decay=1e-5)
     # optimizer = optim.Adam(vae.parameters(), lr=5e-4)
     # optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
-    optimizer = optim.Adam(vae.parameters(), lr=3e-4, betas=(0.5, 0.999))
+    optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999))
     # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
     # scheduler = ReduceLROnPlateau(optimizer, 'min')
     num_epochs = 50 * 10
@@ -161,7 +161,7 @@ def load_vae_checkpoint():
 
 def save_latent_representation():
     vae  = VAE().to(device)
-    vae_weights_dir = f'./vae_weights/{weights_dir}_500.pth'
+    vae_weights_dir = f'./vae_weights/{weights_dir}.pth'
     checkpoint = torch.load(vae_weights_dir)
     vae.load_state_dict(checkpoint['model_state_dict'])
     vae.eval()
@@ -183,7 +183,7 @@ def save_latent_representation():
 
 def main():
     print('Main function: VAE')
-    train_vae()
+    # train_vae()
     save_latent_representation()
 
 if __name__ == '__main__':
