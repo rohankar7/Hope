@@ -20,12 +20,7 @@ import mcubes
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 triplane_res = config.triplane_resolution
 voxel_res = config.voxel_resolution
-# Additional file formats
-# mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=(rgb_final * 255).astype(np.uint8))
-#     if save_name:
-#         trimesh.exchange.export.export_mesh(mesh, save_name, file_type='ply')
-#     else:
-#         trimesh.exchange.export.export_mesh(mesh, triplane_fname[:-4] + '.ply', file_type='ply')
+# trimesh.exchange.export.export_mesh(mesh, triplane_fname[:-4] + '.ply', file_type='ply')
 
 def load_ldm_checkpoint(model, optimizer, path):
     checkpoint = torch.load(path)
@@ -33,16 +28,6 @@ def load_ldm_checkpoint(model, optimizer, path):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     return model, optimizer, epoch
-
-def clean_projection(projection, operation='closing', radius=2):
-    selem = disk(radius)
-    if operation == 'closing':
-        return binary_closing(projection, selem)
-    elif operation == 'opening':
-        return binary_opening(projection, selem)
-    else:
-        raise ValueError("Invalid operation. Use 'closing' or 'opening'.")
-    # return projection
 
 def smooth_voxel_grid(voxel_grid, iterations=1):
     for _ in range(iterations):
@@ -91,7 +76,7 @@ def create_mesh_from_voxel(mlp_voxel):
     # upscale_factor = 2
     voxel_grid_np = mlp_voxel
     # voxel_grid_grayscale = np.max(voxel_grid_np, axis=3)
-    voxel_grid_binary = (voxel_grid_np > threshold).astype(int)
+    voxel_grid_binary = (voxel_grid_np > threshold).astype(np.uint8)
     # voxel_grid_np = scipy.ndimage.zoom(voxel_grid_binary, upscale_factor, order=1)
     mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_binary)
     # subdivided_mesh = mesh.subdivide()
@@ -170,7 +155,7 @@ def generate_from_text(text):
     embedding = client.embeddings.create(input = [text], model=embedding_model).data[0].embedding
     embedding = torch.tensor(embedding).to(device)
     # data_size = (1, 12, 32, 32)  # Size of the latent data
-    data_size = (3, 3, 128, 128)
+    data_size = (3, 3, triplane_res, triplane_res)
     noise_scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
     x_t = torch.randn(data_size).to(device)  # Starting with random noise
     # Reverse diffusion process
@@ -198,7 +183,7 @@ def main():
     # coarse_triplanes = coarse_latent_data.cpu().detach().numpy()
     # np.save(f"{triplane_savedir}/{'output'}.npy", coarse_triplanes)
 
-    # triplane_savedir = './triplane_images_128'
+    # triplane_savedir = f'./triplane_images_{triplane_res}'
     model_from_triplanes(triplane_savedir)
 
 if __name__ == "__main__":

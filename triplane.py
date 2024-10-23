@@ -43,7 +43,7 @@ def compute_sdf(mesh, min_bound = -1, max_bound = 1, resolution=triplane_resolut
 
 def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
     # Creating a grid to hold the projection and RGB colors
-    grid = np.zeros((resolution, resolution, 3), dtype=dtype)
+    grid = np.zeros((resolution, resolution, 4), dtype=dtype)
     count_grid = np.zeros((resolution, resolution, 1), dtype=dtype)  # Averaging the colors
     bounds = mesh.bounds
     min_bound = bounds[0]
@@ -60,7 +60,7 @@ def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
         vertices[:, [2, 0]] += center_offset[[2, 0]]
 
     vertices = np.clip(vertices, 0, resolution - 1).astype(float) # Ensuring that the vertices are within the grid
-    vertex_colors = mesh.visual.vertex_colors[:, :3] / 255.0  # Normalizing the colours
+    vertex_colors = mesh.visual.vertex_colors[:, :4] / 255.0  # Normalizing the colours
     # face_colors = mesh.visual.face_colors[:, :3] / 255.0
     for face in mesh.faces:
         tri = vertices[face]
@@ -80,7 +80,7 @@ def project_to_plane(mesh, plane='xy', resolution=triplane_resolution):
     grid = (grid / count_grid).astype(dtype)  # Averaging the colors
     return grid
 
-def viz_projections(triplane, file_name):
+def viz_projections(triplane, file_name=None):
     cmap = 'viridis'   # or 'gray'
     plt.figure(figsize=(15, 5))
     plt.subplot(1, 3, 1)
@@ -92,7 +92,8 @@ def viz_projections(triplane, file_name):
     plt.subplot(1, 3, 3)
     plt.title('ZX Projection')
     plt.imshow(triplane[2], cmap=cmap)
-    # plt.savefig(f'./assets/' + file_name)
+    # if file_name is not None:
+    #     plt.savefig(f'./assets/' + file_name)
     plt.show()
 
 def generate_triplanes(file_path, resolution=triplane_resolution):
@@ -115,11 +116,11 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
 
 def model_to_triplanes():
     os.makedirs(config.triplane_dir, exist_ok=True)
-    for path in tqdm(sorted(get_random_models()), desc=f"Progress"):
+    for path in tqdm(sorted(get_random_models()[:]), desc=f"Progress"):
         file_name = '_'.join(path.split('/')) + '.npy'
-        if file_name in os.listdir(config.triplane_dir):
-            continue
-        # path = '/'.join(path.split('/')[2:4])
+        # if file_name in os.listdir(config.triplane_dir):
+        #     continue
+        path = '/'.join(path.split('_')).split('.')[0]
         triplane = generate_triplanes(f'{pwd}/{path}/{suffix_dir}', resolution=triplane_resolution) # Triplane shape: 3 x N x N x 3
         if triplane is None:
             continue

@@ -48,6 +48,7 @@ def create_voxel_grid():
         path = '/'.join(path.split('.')[0].split('_'))
         mesh_path = f'{config.pwd}/{path}/{config.suffix_dir}'
         file_name = '_'.join(path.split('/')) + '.npy'
+        if file_name in os.listdir(config.voxel_dir): continue
         try:
             mesh = trimesh.load(mesh_path, force='mesh')
             pitch_val = mesh.extents.max() / (voxel_res - 1)
@@ -61,7 +62,7 @@ def create_voxel_grid():
                 padded_voxels = generate_colored_voxels(mesh, padded_voxels)
             # visualize_voxel(padded_voxels) # Uncommenting this will display the generated coloured voxels
             np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, np.core._exceptions._ArrayMemoryError) as e:
             continue
 
 def main():

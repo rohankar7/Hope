@@ -11,11 +11,11 @@ import math
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 latent_dimension = 32
-num_channels = 3
-hidden_dim_1 = 6
-# hidden_dim_2 = 12
-latent_channels_dim = 12
-weights_dir = 'weights_aeroplanes_2_250'
+num_channels = 4
+hidden_dim_1 = 8
+hidden_dim_2 = 12
+latent_channels_dim = 16
+weights_dir = 'weights'
 num_planes= 3
 
 class VAE(nn.Module):
@@ -30,7 +30,12 @@ class VAE(nn.Module):
             nn.ReLU(),
             # nn.MaxPool2d(1),
             # nn.Dropout(0.1),
-            nn.Conv2d(hidden_dim_1, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(hidden_dim_1, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim_2),
+            # nn.LeakyReLU(),
+            nn.ReLU(),
+            # nn.Dropout(0.1),
+            nn.Conv2d(hidden_dim_2, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(latent_channels_dim),
             # nn.LeakyReLU(),
             nn.ReLU(),
@@ -43,7 +48,12 @@ class VAE(nn.Module):
         self.dc = nn.Linear(self.hidden_dim, self.flattened_dim)
         # Decoder
         self.decoder_conv = nn.Sequential(
-            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_1, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim_2),
+            # nn.LeakyReLU(),
+            nn.ReLU(),
+            # nn.Dropout(0.1),
+            nn.ConvTranspose2d(hidden_dim_2, hidden_dim_1, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_1),
             # nn.LeakyReLU(),
             nn.ReLU(),
@@ -87,30 +97,30 @@ def vae_loss(recon_x, x, mu, logvar, epoch, num_epochs):
     beta = 1e-5 * 0
     # beta = 1 * 0
     # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
-    lambda_tvl = 1e-2
+    lambda_tvl = 0
     tvl = tv_loss(recon_x)
     return mse + (beta * kld) + (lambda_tvl * tvl)
 
-def lr_scheduler_func(epoch, num_epochs, warmup_epochs=5, min_lr=1e-4):
+def lr_scheduler_func(epoch, num_epochs, warmup_epochs=20, min_lr=config.vae_lr):
     if epoch < warmup_epochs: return float(epoch / warmup_epochs)
-    else: return min_lr + 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
+    # else: return min_lr + 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
+    else: return 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
     # return 1e-2
 
 def train_vae():
-    save_path = './vae_weights'
-    os.makedirs(save_path, exist_ok=True)
+    os.makedirs(config.vae_weights_dir , exist_ok=True)
     vae = VAE().to(device)
-    patience = 500
+    patience = 1000
     early_stopping_patirnce = 0
     # optimizer = optim.Adam(vae.parameters(), lr=1e-3, weight_decay=1e-5)
     # optimizer = optim.Adam(vae.parameters(), lr=5e-4)
     # optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
-    optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999))
+    optimizer = optim.Adam(vae.parameters(), lr=config.vae_lr, betas=(0.5, 0.999))
     # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
     # scheduler = ReduceLROnPlateau(optimizer, 'min')
-    num_epochs = 50 * 10
-    config = None
-    scheduler = LambdaLR(optimizer, lr_lambda= lambda epoch: lr_scheduler_func(epoch, num_epochs))
+    num_epochs = 50 * 50
+    weights_config = None
+    scheduler = LambdaLR(optimizer, lr_lambda = lambda epoch: lr_scheduler_func(epoch, num_epochs))
     best_loss = torch.inf
     for epoch in range(num_epochs):
         epoch_loss = 0
@@ -131,7 +141,7 @@ def train_vae():
         print(f'Epoch {epoch+1}, Loss: {loss_avg}, LR: {scheduler.get_last_lr()}')
         if best_loss > loss_avg:
             best_loss = loss_avg
-            config = {
+            weights_config = {
                 'epoch': epoch,
                 'model_state_dict': vae.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
@@ -142,26 +152,27 @@ def train_vae():
         else:
             early_stopping_patirnce += 1
             if early_stopping_patirnce == patience: break
-        if (epoch + 1) % 10 == 0:
-            torch.save(config, f'{save_path}/{weights_dir}_{epoch+1}.pth')
+        if (epoch + 1) % 500 == 0:
+            torch.save(weights_config, f'{config.vae_weights_dir}/{weights_dir}_{epoch+1}.pth')
 
 def load_vae_checkpoint():
     vae = VAE().to(device)
-    checkpoint = torch.load(f"./vae_weights/{weights_dir}.pth")
-    optimizer = optim.Adam(vae.parameters(), lr=1e-2, betas=(0.5, 0.999))
-    num_epochs = 50 * 20
+    checkpoint = torch.load(f"{config.vae_weights_dir}/{weights_dir}.pth")
+    optimizer = optim.Adam(vae.parameters(), lr=3e-4, betas=(0.5, 0.999))
+    num_epochs = 50 * 30
     scheduler = LambdaLR(optimizer, lr_lambda= lambda epoch: lr_scheduler_func(epoch, num_epochs))
     vae.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     start_epoch = checkpoint['epoch'] + 1
-    loss_avg = checkpoint['loss_avg']
+    loss_avg = checkpoint['loss']
 
     print(f"Resuming training from epoch {start_epoch}, last average loss: {loss_avg:.6f}")
 
 def save_latent_representation():
     vae  = VAE().to(device)
-    vae_weights_dir = f'./vae_weights/{weights_dir}.pth'
+    vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_2500.pth'
+    # vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_aeroplanes_1.pth'
     checkpoint = torch.load(vae_weights_dir)
     vae.load_state_dict(checkpoint['model_state_dict'])
     vae.eval()
@@ -179,11 +190,11 @@ def save_latent_representation():
             z_decoded = vae.decode(z_reparametrized)
             z_decoded = z_decoded.cpu().permute(0, 2, 3, 1).contiguous().numpy()
             # if i > 99:
-            viz_projections(z_decoded[0], z_decoded[1], z_decoded[2])
+            viz_projections(z_decoded)
 
 def main():
     print('Main function: VAE')
-    # train_vae()
+    train_vae()
     save_latent_representation()
 
 if __name__ == '__main__':
