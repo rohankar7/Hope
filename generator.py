@@ -18,9 +18,6 @@ from create_voxel import visualize_voxel
 import mcubes
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-triplane_res = config.triplane_resolution
-voxel_res = config.voxel_resolution
-# trimesh.exchange.export.export_mesh(mesh, triplane_fname[:-4] + '.ply', file_type='ply')
 
 def load_ldm_checkpoint(model, optimizer, path):
     checkpoint = torch.load(path)
@@ -45,94 +42,48 @@ def repair_mesh(mesh):
     return mesh
 
 # 2, 5
-def create_mesh_from_voxel(mlp_voxel):
-    threshold = 0.5
-    # visualize_voxel(mlp_voxel.squeeze().numpy(), threshold=threshold)
-    visualize_voxel(mlp_voxel, threshold=threshold)
-    # mlp_voxel = torch.sum(mlp_voxel, axis=3)
-    # voxel_grid_binary = (mlp_voxel > threshold).int()
-    # voxel_grid_np = voxel_grid_binary.squeeze().numpy()
-    # mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
-    # vertex_indices = mesh.vertices.astype(int)
-    # vertex_indices = np.clip(vertex_indices, 0, np.array(voxel_grid_np.shape[:3]) - 1)
-    # vertex_colors = voxel_grid_np[vertex_indices[:, 0], vertex_indices[:, 1], vertex_indices[:, 2], :]
-    # if vertex_colors.max() <= 1.0:
-    #     vertex_colors = vertex_colors * 255.0
-    # mesh.visual.vertex_colors = vertex_colors
-    # return mesh
-    # from scipy.ndimage import gaussian_filter
-    # # mlp_voxel = mlp_voxel.cpu().numpy()
-    # # mlp_voxel = gaussian_filter(mlp_voxel, sigma=1)
-    # vertices, faces, normals, values = measure.marching_cubes(mlp_voxel)
-    # mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_normals=normals, face_normals=values)
-    # mesh.show()
-    # return mesh
-    # vertices, triangles = mcubes.marching_cubes(mlp_voxel, 0.5)
-    # vertices = vertices / (256 - 1.0) * 2 - 1
-    # mesh = trimesh.Trimesh(vertices, triangles)
-    # return mesh
-    # voxel_grid_np = mlp_voxel.squeeze().numpy()  # Assuming shape (N, N, N, 3)
-    # import scipy
-    # upscale_factor = 2
-    voxel_grid_np = mlp_voxel
-    # voxel_grid_grayscale = np.max(voxel_grid_np, axis=3)
-    voxel_grid_binary = (voxel_grid_np > threshold).astype(np.uint8)
-    # voxel_grid_np = scipy.ndimage.zoom(voxel_grid_binary, upscale_factor, order=1)
-    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_binary)
-    # subdivided_mesh = mesh.subdivide()
-
-    # If needed, repeat subdivision multiple times to increase smoothness
-    # for _ in range(10):  # Apply subdivision multiple times for smoother results
-        # subdivided_mesh = subdivided_mesh.subdivide()
-
+def colored_mesh_from_voxel(mlp_voxel):
+    threshold = 0
+    if isinstance(mlp_voxel, np.ndarray):
+        mlp_voxel = torch.from_numpy(mlp_voxel)
+    voxel_grid_binary = (torch.sum(mlp_voxel, axis=3) > threshold).int()
+    voxel_grid_np = voxel_grid_binary.numpy()
+    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
+    vertex_indices = mesh.vertices.astype(int)
+    vertex_indices = np.clip(vertex_indices, 0, np.array(voxel_grid_np.shape) - 1)
+    mlp_voxel_np = mlp_voxel.numpy()
+    vertex_colors = mlp_voxel_np[vertex_indices[:, 0], vertex_indices[:, 1], vertex_indices[:, 2], :]
+    if vertex_colors.max() <= 1.0:
+        vertex_colors = (vertex_colors * 255.0).astype(np.uint8)
+    mesh.visual.vertex_colors = vertex_colors
     mesh.show()
     return mesh
-    # voxel_object = trimesh.voxel.VoxelGrid(voxel_grid_binary)
-    # mesh = voxel_object.marching_cubes
-    vertex_indices = mesh.vertices.astype(np.uint8)
-    vertex_indices = np.clip(vertex_indices, 0, np.array(voxel_grid_np.shape[:3]) - 1)
-    vertex_colors = voxel_grid_np[vertex_indices[:, 0], vertex_indices[:, 1], vertex_indices[:, 2], :]
-    if vertex_colors.max() > 1.0:
-        vertex_colors = vertex_colors / 255.0
-    mesh.visual.vertex_colors = vertex_colors
-    face_centroids = mesh.triangles_center.astype(int)
 
-    # Ensure indices are within the voxel grid bounds
-    face_centroids = np.clip(face_centroids, 0, np.array(voxel_grid_np.shape[:3]) - 1)
-
-    # Extract the RGB values for each face based on the centroids
-    face_colors = voxel_grid_np[face_centroids[:, 0], face_centroids[:, 1], face_centroids[:, 2], :]
-
-    # Normalize the colors to [0, 255] for trimesh compatibility if they are in [0, 1]
-    if face_colors.max() <= 1.0:
-        face_colors = (face_colors * 255).astype(np.uint8)
-
-    # Add alpha channel to make RGBA colors
-    alpha_channel = np.full((face_colors.shape[0], 1), 255, dtype=np.uint8)  # Alpha value of 255 (fully opaque)
-    face_colors = np.hstack([face_colors, alpha_channel])  # Combine RGB with Alpha to form RGBA
-
-    # Assign the face colors to the mesh
-    mesh.visual.face_colors = face_colors
-
+def mesh_from_voxel(mlp_voxel):
+    if isinstance(mlp_voxel, np.ndarray):
+        mlp_voxel = torch.from_numpy(mlp_voxel)
+    threshold = 0.5
+    voxel_grid_binary = (mlp_voxel > threshold).int()
+    voxel_grid_np = voxel_grid_binary.squeeze().numpy()
+    mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
     return mesh
 
 def mesh_from_mlp(triplane):
-    triplane_in_dim = 3 * triplane_res * triplane_res * config.triplane_features
-    voxel_out_dim = voxel_res * voxel_res * voxel_res * 3
-    model = TriplaneMLP(triplane_in_dim, voxel_out_dim)
-    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_80.pth'))
+    triplane_in_dim = config.triplane_planes * (config.triplane_resolution ** 2) * config.triplane_features
+    model = TriplaneMLP()
+    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_300.pth'))
     model.eval()
     with torch.no_grad():
         input_tensor = torch.tensor(triplane.reshape(triplane_in_dim), dtype=torch.float32)
         output = model(input_tensor)
-        mesh = create_mesh_from_voxel(output)
+        mesh = mesh_from_voxel(output)
         mesh = repair_mesh(mesh)
         # mesh = smooth_voxel_grid(mesh)
         mesh.show()
     return mesh
 
 def model_from_triplanes(output_dir):
-    for np_triplane in os.listdir(output_dir)[:10]:
+    for np_triplane in sorted(os.listdir(output_dir)[:10]):
         triplane = np.load(os.path.join(output_dir, np_triplane))
         mesh = mesh_from_mlp(triplane)
         model_gen_dir = './generated_models'
@@ -155,7 +106,7 @@ def generate_from_text(text):
     embedding = client.embeddings.create(input = [text], model=embedding_model).data[0].embedding
     embedding = torch.tensor(embedding).to(device)
     # data_size = (1, 12, 32, 32)  # Size of the latent data
-    data_size = (3, 3, triplane_res, triplane_res)
+    data_size = (3, 3, config.triplane_resolution, config.triplane_resolution)
     noise_scheduler = NoiseScheduler(timesteps, linear_beta_schedule)
     x_t = torch.randn(data_size).to(device)  # Starting with random noise
     # Reverse diffusion process
@@ -175,7 +126,7 @@ def decode_latent_triplanes(latent_triplanes):
 
 def main():
     triplane_savedir = './generated_triplanes'
-    triplane_savedir = f'./triplane_images_{triplane_res}'
+    triplane_savedir = f'./triplane_images_{config.triplane_resolution}_alpha'
     # text = 'A white aeroplane with red wings'
     # coarse_latent_data = generate_from_text(text)
     # # print(coarse_latent_data.shape)
@@ -185,6 +136,7 @@ def main():
 
     # triplane_savedir = f'./triplane_images_{triplane_res}'
     model_from_triplanes(triplane_savedir)
+    # mesh_from_np_voxel()
 
 if __name__ == "__main__":
     main()

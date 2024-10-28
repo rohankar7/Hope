@@ -5,9 +5,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from Model_List import model_paths
 from openai import OpenAI
-
-load_dotenv()
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+import config
 
 def get_prompt(text):
     prompt = f"""
@@ -27,29 +25,33 @@ def get_prompt(text):
     """
     return prompt
 
-ShapeNetCoreDescriptions = {
-    'Class': [],
-    'Subclass': [],
-    'Caption': [],
-}
-output_file_path = './text/fusion.csv'
-df = pd.read_csv('./text/captions.csv')
+def main():
+    load_dotenv()
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    ShapeNetCoreDescriptions = {
+        'Class': [],
+        'Subclass': [],
+        'Caption': [],
+    }
+    df = pd.read_csv(config.captions_dir)
+    for path in model_paths[3:4]:
+        c,s = path.split('/')[2:4]
+        descriptions = df[(df['Class']==int(c[1:])) & (df['Subclass']==s)]['Caption'].to_list()
+        ShapeNetCoreDescriptions['Class'].append(str(c))
+        ShapeNetCoreDescriptions['Subclass'].append(str(s))
+        response = client.chat.completions.with_raw_response.create(
+            messages=[{
+                "role": "user", "content": get_prompt('\n'.join(descriptions)),
+            }],
+            model="gpt-4o-mini",
+            temperature=0.1,
+        )
+        completion = response.parse()
+        caption = str(completion.choices[0].message.content)
+        ShapeNetCoreDescriptions['Caption'].append(caption)
 
-for path in model_paths[3:4]:
-    c,s = path.split('/')[2:4]
-    descriptions = df[(df['Class']==int(c[1:])) & (df['Subclass']==s)]['Caption'].to_list()
-    ShapeNetCoreDescriptions['Class'].append(str(c))
-    ShapeNetCoreDescriptions['Subclass'].append(str(s))
-    response = client.chat.completions.with_raw_response.create(
-        messages=[{
-            "role": "user", "content": get_prompt('\n'.join(descriptions)),
-        }],
-        model="gpt-4o-mini",
-        temperature=0.1,
-    )
-    completion = response.parse()
-    caption = str(completion.choices[0].message.content)
-    ShapeNetCoreDescriptions['Caption'].append(caption)
+    caption_df = pd.DataFrame(ShapeNetCoreDescriptions)
+    caption_df.to_csv(config.fused_captions_dir, index=False)
 
-caption_df = pd.DataFrame(ShapeNetCoreDescriptions)
-caption_df.to_csv(output_file_path, index=False)
+if __name__ == '__main__':
+    main()

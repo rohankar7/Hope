@@ -10,11 +10,12 @@ import config
 import math
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-latent_dimension = 32
+latent_dimension = 16
 num_channels = 4
 hidden_dim_1 = 8
-hidden_dim_2 = 12
-latent_channels_dim = 16
+hidden_dim_2 = 16
+hidden_dim_3 = 32
+latent_channels_dim = 64
 weights_dir = 'weights'
 num_planes= 3
 
@@ -23,23 +24,18 @@ class VAE(nn.Module):
         super().__init__()
         # Encoder
         self.encoder_conv = nn.Sequential(
-            # nn.Conv2d(num_channels, hidden_dim, kernel_size=4, stride=2, padding=1),
             nn.Conv2d(num_channels, hidden_dim_1, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_1),
-            # nn.LeakyReLU(),
             nn.ReLU(),
-            # nn.MaxPool2d(1),
-            # nn.Dropout(0.1),
             nn.Conv2d(hidden_dim_1, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_2),
-            # nn.LeakyReLU(),
             nn.ReLU(),
-            # nn.Dropout(0.1),
-            nn.Conv2d(hidden_dim_2, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(hidden_dim_2, hidden_dim_3, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim_3),
+            nn.ReLU(),
+            nn.Conv2d(hidden_dim_3, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(latent_channels_dim),
-            # nn.LeakyReLU(),
-            nn.ReLU(),
-            # nn.Dropout(0.1),
+            nn.ReLU()
         )
         self.flattened_dim = latent_channels_dim * latent_dimension * latent_dimension
         self.hidden_dim = num_channels * latent_dimension * latent_dimension
@@ -48,16 +44,15 @@ class VAE(nn.Module):
         self.dc = nn.Linear(self.hidden_dim, self.flattened_dim)
         # Decoder
         self.decoder_conv = nn.Sequential(
-            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(hidden_dim_2),
-            # nn.LeakyReLU(),
+            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_3, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim_3),
             nn.ReLU(),
-            # nn.Dropout(0.1),
+            nn.ConvTranspose2d(hidden_dim_3, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim_2),
+            nn.ReLU(),
             nn.ConvTranspose2d(hidden_dim_2, hidden_dim_1, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_1),
-            # nn.LeakyReLU(),
             nn.ReLU(),
-            # nn.Dropout(0.1),
             nn.ConvTranspose2d(hidden_dim_1, num_channels, kernel_size=4, stride=2, padding=1, bias=False),
             nn.Sigmoid()  # Ensuring output is between 0 and 1
         )
@@ -92,14 +87,15 @@ def tv_loss(x):
 
 def vae_loss(recon_x, x, mu, logvar, epoch, num_epochs):
     mse = F.mse_loss(recon_x, x, reduction='mean')
-    kld = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+    # kld = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     # beta = min(1.0, epoch / (num_epochs * 0.3))  # Increase beta over the first 30% of epochs
-    beta = 1e-5 * 0
+    beta = 1e-6 * 0
     # beta = 1 * 0
-    # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
     lambda_tvl = 5e-2
     tvl = tv_loss(recon_x)
-    return mse + (beta * kld) + (lambda_tvl * tvl)
+    # return mse + (beta * kld) + (lambda_tvl * tvl)
+    return mse + (lambda_tvl * tvl)
+
 
 def lr_scheduler_func(epoch, num_epochs, warmup_epochs=20, min_lr=config.vae_lr):
     if epoch < warmup_epochs: return float(epoch / warmup_epochs)
@@ -118,7 +114,7 @@ def train_vae():
     optimizer = optim.Adam(vae.parameters(), lr=config.vae_lr, betas=(0.5, 0.999))
     # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
     # scheduler = ReduceLROnPlateau(optimizer, 'min')
-    num_epochs = 50 * 30
+    num_epochs = config.vae_epochs
     weights_config = None
     scheduler = LambdaLR(optimizer, lr_lambda = lambda epoch: lr_scheduler_func(epoch, num_epochs))
     best_loss = torch.inf
@@ -152,15 +148,14 @@ def train_vae():
         else:
             early_stopping_patirnce += 1
             if early_stopping_patirnce == patience: break
-        if (epoch + 1) % 100 == 0:
+        if (epoch + 1) % 500 == 0:
             torch.save(weights_config, f'{config.vae_weights_dir}/{weights_dir}_{epoch+1}.pth')
 
 def load_vae_checkpoint():
     vae = VAE().to(device)
     checkpoint = torch.load(f"{config.vae_weights_dir}/{weights_dir}.pth")
     optimizer = optim.Adam(vae.parameters(), lr=3e-4, betas=(0.5, 0.999))
-    num_epochs = 50 * 20
-    scheduler = LambdaLR(optimizer, lr_lambda= lambda epoch: lr_scheduler_func(epoch, num_epochs))
+    scheduler = LambdaLR(optimizer, lr_lambda= lambda epoch: lr_scheduler_func(epoch, config.vae_epochs))
     vae.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -171,7 +166,8 @@ def load_vae_checkpoint():
 
 def save_latent_representation():
     vae  = VAE().to(device)
-    vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_aeroplanes.pth'
+    vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_{config.vae_epochs}.pth'
+    # vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_aeroplanes_1.pth'
     checkpoint = torch.load(vae_weights_dir)
     vae.load_state_dict(checkpoint['model_state_dict'])
     vae.eval()
@@ -193,7 +189,7 @@ def save_latent_representation():
 
 def main():
     print('Main function: VAE')
-    # train_vae()
+    train_vae()
     save_latent_representation()
 
 if __name__ == '__main__':

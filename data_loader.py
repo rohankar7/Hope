@@ -52,8 +52,8 @@ class TriplaneVoxelDataset(Dataset):
         return flattened_image, voxel_grid
 
 def voxel_dataloader():
-    voxel_paths = [os.path.join(config.voxel_dir, path) for path in os.listdir(config.voxel_dir)[:] if path.endswith('.npy')]
-    triplane_paths = [os.path.join(config.triplane_dir, path) for path in voxel_paths if path.endswith('.npy')]
+    voxel_paths = [os.path.join(config.voxel_dir, path) for path in os.listdir(config.voxel_dir)[:50] if path.endswith('.npy')]
+    triplane_paths = [os.path.join(config.triplane_dir, path) for path in os.listdir(config.triplane_dir)[:50] if path in os.listdir(config.voxel_dir)]
     train_img_files, valid_img_files, train_voxel_files, valid_voxel_files = train_test_split(triplane_paths, voxel_paths, test_size=0.2, random_state=42)
     train_dataset = TriplaneVoxelDataset(train_img_files, train_voxel_files)
     valid_dataset = TriplaneVoxelDataset(valid_img_files, valid_voxel_files)

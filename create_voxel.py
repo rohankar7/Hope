@@ -60,7 +60,7 @@ def create_voxel_grid():
             padded_voxels[insert_slices] = voxel_data[:voxel_res, :voxel_res, :voxel_res]
             if config.voxel_type == 'color':
                 padded_voxels = generate_colored_voxels(mesh, padded_voxels)
-            # visualize_voxel(padded_voxels) # Uncommenting this will display the generated coloured voxels
+            # visualize_voxel(padded_voxels) # Uncommenting this will display the generated voxels
             np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
         except (IndexError, AttributeError, np.core._exceptions._ArrayMemoryError) as e:
             continue

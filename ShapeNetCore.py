@@ -9,8 +9,7 @@ np.random.seed(config.random_seed)
 
 def get_random_models():
     random_models = []
-    selection_size = 50
-    # Selecting 5 random models from each ShapeNetCore class
+    selection_size = config.sample_size
     for classes in os.listdir(pwd):
         class_dir = os.path.join(pwd, classes)
         models = []

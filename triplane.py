@@ -101,7 +101,7 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     try:
         mesh.visual = mesh.visual.to_color()
     except (IndexError, AttributeError) as e:
-        # print('Skipped model:', file_path)
+        # print('Skipped model:', file_path, e)
         return None
     # sdf_grid = compute_sdf(mesh)
     # sdf_reshaped = sdf_grid[:, :, :, np.newaxis]

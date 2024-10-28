@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR, LambdaLR
 from data_loader import voxel_dataloader
 import matplotlib.pyplot as plt
 import os
@@ -14,16 +14,23 @@ voxel_res = config.voxel_resolution
 triplane_res = config.triplane_resolution
 
 class TriplaneMLP(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self):
         super().__init__()
+        self.input_dim = (config.triplane_resolution ** 2) * config.triplane_features * config.triplane_planes
+        self.output_dim = (config.voxel_resolution ** 3)
+        if config.voxel_type == 'color':
+            self.output_dim *= 3
         self.hidden_dim1 = 512
         self.hidden_dim2 = 256
+        # self.hidden_dim3 = 128
         self.mlp_layers = nn.Sequential(
-            nn.Linear(input_dim, self.hidden_dim1),
+            nn.Linear(self.input_dim, self.hidden_dim1),
             nn.ReLU(),
             nn.Linear(self.hidden_dim1, self.hidden_dim2),
             nn.ReLU(),
-            nn.Linear(self.hidden_dim2, output_dim),
+            # nn.Linear(self.hidden_dim2, self.hidden_dim3),
+            # nn.ReLU(),
+            nn.Linear(self.hidden_dim2, self.output_dim),
             nn.Sigmoid()
         )
         
@@ -35,23 +42,19 @@ class TriplaneMLP(nn.Module):
 
 def train_val_mlp():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    input_dim = 3 * triplane_res * triplane_res * config.triplane_features
-    output_dim = voxel_res * voxel_res * voxel_res
-    if config.voxel_type == 'color':
-        output_dim *= 3
-    model = TriplaneMLP(input_dim, output_dim)
+    model = TriplaneMLP()
     model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCELoss()
-    # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+    criterion = nn.MSELoss()
+    # criterion = nn.BCELoss()
+    scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
     voxel_train_dataloader, voxel_val_dataloader = voxel_dataloader()
     os.makedirs(config.mlp_weights_dir, exist_ok=True)
     early_stopping_counter = 0
-    save_interval = 10
-    early_stopping_patience = 100
+    num_epochs = 100
+    early_stopping_patience = num_epochs
     best_val_loss = float('inf')
     # Training
-    num_epochs = 100
     torch.cuda.empty_cache()
     for epoch in range(num_epochs):
         model.train()
@@ -68,7 +71,7 @@ def train_val_mlp():
             optimizer.step()
             training_loss += loss.item()
         epoch_train_loss = training_loss / len(voxel_train_dataloader)
-        print(f'Epoch {epoch+1}, Training loss: {epoch_train_loss:.2f}')
+        print(f'Epoch {epoch+1}, Training loss: {epoch_train_loss:.8f}')
         # Validation
         model.eval()
         validation_loss = 0
@@ -82,19 +85,19 @@ def train_val_mlp():
                 loss = criterion(outputs, targets)
                 validation_loss += loss.item()
         epoch_val_loss = validation_loss / len(voxel_val_dataloader)
-        print(f'Epoch {epoch+1}, Validation loss: {epoch_val_loss:.2f}')
-        # scheduler.step()
+        print(f'Epoch {epoch+1}, Validation loss: {epoch_val_loss:.8f}')
+        scheduler.step()
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
-            print('Saving the model checkpoints at best validation loss:', best_val_loss)
-            torch.save(model.state_dict(), f'{config.mlp_weights_dir}/best_mlp_weights.pth')
+            # print('Saving the model checkpoints at best validation loss:', best_val_loss)
+            # torch.save(model.state_dict(), f'{config.mlp_weights_dir}/best_mlp_weights.pth')
             early_stopping_counter = 0
         else:
             early_stopping_counter += 1
             if early_stopping_counter >= early_stopping_patience:
                 print("Early stopping triggered.")
                 break
-        if (epoch + 1) % save_interval == 0:
+        if (epoch + 1) % 50 == 0:
             torch.save(model.state_dict(), f'{config.mlp_weights_dir}/mlp_weights_{epoch+1}.pth')
         torch.cuda.empty_cache()
 

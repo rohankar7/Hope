@@ -23,3 +23,4 @@ z_vae.py
 colored_voxels/
 aeroplane_triplanes/
 assets/
+text/*.csv
