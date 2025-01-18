@@ -87,7 +87,6 @@ class DoubleConv(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.ReLU(inplace=True)
-        
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu2 = nn.ReLU(inplace=True)
@@ -96,14 +95,9 @@ class DoubleConv(nn.Module):
         self.cross_attention2 = CrossAttention(out_channels, embedding_dim)
 
     def forward(self, x, text_embedding, time_embedding):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
+        x = self.relu1(self.bn1(self.conv1(x)))
         x = self.cross_attention1(x, text_embedding, time_embedding)
-        
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu2(x)
+        x = self.relu2(self.bn2(self.conv2(x)))
         x = self.cross_attention2(x, text_embedding, time_embedding)
         
         return x

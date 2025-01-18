@@ -62,7 +62,7 @@ def colored_mesh_from_voxel(mlp_voxel):
 def mesh_from_voxel(mlp_voxel):
     if isinstance(mlp_voxel, np.ndarray):
         mlp_voxel = torch.from_numpy(mlp_voxel)
-    threshold = 0.5
+    threshold = 0.
     voxel_grid_binary = (mlp_voxel > threshold).int()
     voxel_grid_np = voxel_grid_binary.squeeze().numpy()
     mesh = trimesh.voxel.ops.matrix_to_marching_cubes(voxel_grid_np)
@@ -71,7 +71,7 @@ def mesh_from_voxel(mlp_voxel):
 def mesh_from_mlp(triplane):
     triplane_in_dim = config.triplane_planes * (config.triplane_resolution ** 2) * config.triplane_features
     model = TriplaneMLP()
-    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_300.pth'))
+    model.load_state_dict(torch.load('./mlp_weights/mlp_weights_100.pth'))
     model.eval()
     with torch.no_grad():
         input_tensor = torch.tensor(triplane.reshape(triplane_in_dim), dtype=torch.float32)

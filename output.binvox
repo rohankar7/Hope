@@ -1,0 +1,5 @@
+#binvox 1
+dim 64 64 64
+translate 0 0 0
+scale 1
+data

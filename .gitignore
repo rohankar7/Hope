@@ -24,3 +24,4 @@ colored_voxels/
 aeroplane_triplanes/
 assets/
 text/*.csv
+binvox_rw.py

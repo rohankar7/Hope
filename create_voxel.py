@@ -10,15 +10,14 @@ from tqdm import tqdm
 def visualize_voxel(voxel_data, threshold=0):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    if config.voxel_type == 'color':
-        if voxels.max() > 1:
-            voxels = voxels / 255.0 # Normalizing the voxel colors for visualization
-        mask = np.any(voxels > threshold, axis=-1) # Masking for non-zero voxels with color intensity > 0
-        x, y, z = np.indices(voxels.shape[:-1])  # Getting the grid coordinates
-        ax.scatter(x[mask], y[mask], z[mask], c=voxels[mask].reshape(-1, 3), marker='o', s=20)
+    if np.ndim(voxel_data) == 4:
+        if voxel_data.shape[-1] == 4: voxel_data = voxel_data[..., :3]
+        if voxel_data.max() > 1: voxel_data  = voxel_data / 255.0 # Normalizing the voxel colors for visualization
+        mask = np.any(voxel_data > threshold, axis=-1) # Masking for non-zero voxels with color intensity > 0
+        x, y, z = np.indices(voxel_data.shape[:-1])  # Getting the grid coordinates
+        ax.scatter(x[mask], y[mask], z[mask], c=voxel_data[mask].reshape(-1, 3), marker='o', s=20)
         ax.set_box_aspect([1, 1, 1])  # Aspect ratio is 1:1:1
-    else:
-        ax.voxels(voxel_data, edgecolor='k')
+    else: ax.voxels(voxel_data, edgecolor='k')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
@@ -40,11 +39,14 @@ def generate_colored_voxels(mesh, padded_voxels):
                     distances = np.linalg.norm(mesh.vertices - voxel_position, axis=1)
                     closest_vertex_idx = np.argmin(distances) # Find the nearest vertex from the original mesh
                     voxel_colors[x, y, z] = vertex_colors[closest_vertex_idx]
+    return voxel_colors
 
 def create_voxel_grid():
     voxel_res = config.voxel_resolution
     os.makedirs(config.voxel_dir, exist_ok=True)
-    for path in tqdm(sorted(os.listdir(config.triplane_dir)[:]), desc='Progress'):
+    l = ['02691156_1a29042e20ab6f005e9e2656aff7dd5b.npy']
+    # for path in tqdm(sorted(os.listdir(config.triplane_dir)[:]), desc='Progress'):
+    for path in l:
         path = '/'.join(path.split('.')[0].split('_'))
         mesh_path = f'{config.pwd}/{path}/{config.suffix_dir}'
         file_name = '_'.join(path.split('/')) + '.npy'
@@ -60,8 +62,8 @@ def create_voxel_grid():
             padded_voxels[insert_slices] = voxel_data[:voxel_res, :voxel_res, :voxel_res]
             if config.voxel_type == 'color':
                 padded_voxels = generate_colored_voxels(mesh, padded_voxels)
-            # visualize_voxel(padded_voxels) # Uncommenting this will display the generated voxels
-            np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
+            visualize_voxel(padded_voxels) # Uncommenting this will display the generated voxels
+            # np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
         except (IndexError, AttributeError, np.core._exceptions._ArrayMemoryError) as e:
             continue
 

@@ -10,11 +10,10 @@ import config
 import math
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-latent_dimension = 16
+latent_dimension = 32
 num_channels = 4
-hidden_dim_1 = 8
-hidden_dim_2 = 16
-hidden_dim_3 = 32
+hidden_dim_1 = 16
+hidden_dim_2 = 32
 latent_channels_dim = 64
 weights_dir = 'weights'
 num_planes= 3
@@ -30,10 +29,7 @@ class VAE(nn.Module):
             nn.Conv2d(hidden_dim_1, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_2),
             nn.ReLU(),
-            nn.Conv2d(hidden_dim_2, hidden_dim_3, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(hidden_dim_3),
-            nn.ReLU(),
-            nn.Conv2d(hidden_dim_3, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(hidden_dim_2, latent_channels_dim, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(latent_channels_dim),
             nn.ReLU()
         )
@@ -44,10 +40,7 @@ class VAE(nn.Module):
         self.dc = nn.Linear(self.hidden_dim, self.flattened_dim)
         # Decoder
         self.decoder_conv = nn.Sequential(
-            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_3, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(hidden_dim_3),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim_3, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(latent_channels_dim, hidden_dim_2, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim_2),
             nn.ReLU(),
             nn.ConvTranspose2d(hidden_dim_2, hidden_dim_1, kernel_size=4, stride=2, padding=1, bias=False),
@@ -98,19 +91,13 @@ def lr_scheduler_func(epoch, num_epochs, warmup_epochs=config.vae_warmup_epochs,
     if epoch < warmup_epochs: return float(epoch / warmup_epochs)
     # else: return min_lr + 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
     else: return 0.5 * float(1 + math.cos(math.pi * (epoch - warmup_epochs) / (num_epochs - warmup_epochs)))
-    # return 1e-2
 
 def train_vae():
     os.makedirs(config.vae_weights_dir , exist_ok=True)
     vae = VAE().to(device)
     patience = 1000
     early_stopping_patirnce = 0
-    # optimizer = optim.Adam(vae.parameters(), lr=1e-3, weight_decay=1e-5)
-    # optimizer = optim.Adam(vae.parameters(), lr=5e-4)
-    # optimizer = optim.Adam(vae.parameters(), lr=1e-4, betas=(0.5, 0.999), weight_decay=1e-5)
     optimizer = optim.Adam(vae.parameters(), lr=config.vae_lr, betas=(0.5, 0.999))
-    # scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=5, cooldown=5)
-    # scheduler = ReduceLROnPlateau(optimizer, 'min')
     num_epochs = config.vae_epochs
     weights_config = None
     scheduler = LambdaLR(optimizer, lr_lambda = lambda epoch: lr_scheduler_func(epoch, num_epochs))
@@ -118,11 +105,9 @@ def train_vae():
     for epoch in range(num_epochs):
         epoch_loss = 0
         for triplanes in tqdm(triplane_dataloader(), desc=f'Epoch {epoch + 1} / {num_epochs} - Training'):
-        # for triplanes in triplane_dataloader():
             optimizer.zero_grad()
             triplanes = triplanes.to(device)
             triplanes = triplanes.squeeze()
-            # recon_triplane, mu, logvar = vae(triplanes)
             recon_triplane = vae(triplanes)
             loss = vae_loss(recon_triplane, triplanes, 0, 0, epoch, num_epochs)
             loss.backward()
@@ -130,10 +115,8 @@ def train_vae():
             optimizer.step()
             epoch_loss += loss.item()
         loss_avg = epoch_loss / len(triplane_dataloader())
-        # scheduler.step(loss_avg)
         scheduler.step()
         print(f'Epoch {epoch+1}, Loss: {loss_avg}, LR: {scheduler.get_last_lr()}')
-        # print(f'Epoch {epoch+1}, Loss: {loss_avg}')
         if best_loss > loss_avg:
             best_loss = loss_avg
             weights_config = {
@@ -147,7 +130,7 @@ def train_vae():
         else:
             early_stopping_patirnce += 1
             if early_stopping_patirnce == patience: break
-        if (epoch + 1) % 50 == 0:
+        if (epoch + 1) % (config.vae_epochs//2) == 0:
             torch.save(weights_config, f'{config.vae_weights_dir}/{weights_dir}_{epoch+1}.pth')
 
 def load_vae_checkpoint():
@@ -164,6 +147,7 @@ def load_vae_checkpoint():
     print(f"Resuming training from epoch {start_epoch}, last average loss: {loss_avg:.6f}")
 
 def save_latent_representation():
+    device = 'cpu'
     vae  = VAE().to(device)
     vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_{config.vae_epochs}.pth'
     # vae_weights_dir = f'{config.vae_weights_dir}/{weights_dir}_aeroplanes_1.pth'
@@ -176,15 +160,9 @@ def save_latent_representation():
         for i, triplanes in enumerate(triplane_dataloader()):
             triplanes = triplanes.to(device)
             triplanes = triplanes.squeeze()
-            # mu, logvar = vae.encode(triplanes)
             recon_x = vae.encode(triplanes)
-            # latent_representation = torch.cat([mu, logvar], dim=1)
-            # latent_path = os.path.join(latent_output_dir, f'latent_{i+1}.pt')
-            # torch.save(mu.cpu(), latent_path)    # latent shape: batch_size * num_planes(3) x num_features(3) x height(32) x width(32)
-            # z_reparametrized = vae.reparameterize(mu, logvar)
             z_decoded = vae.decode(recon_x)
             z_decoded = z_decoded.cpu().permute(0, 2, 3, 1).contiguous().numpy()
-            # if i > 99:
             viz_projections(z_decoded)
 
 def main():

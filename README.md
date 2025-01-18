@@ -16,6 +16,7 @@
 
 ### Variational Auto-Encoder (VAE)
 Run vae.py: This will train the VAE on the generated tri-planes and convert them into latent tri-planes
+![VAE decoded triplanes](./assets/vae_1.png)
 
 ### Latent Diffusion Model (LDM)
 Run ldm.py: This will train the ldm model on latent tri-planes and use the generated text embeddings to condition the model
