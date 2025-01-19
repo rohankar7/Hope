@@ -1,6 +1,7 @@
 __pycache__/
-vae_weights/
-mlp_weights/
+.env
+weights/
+data/
 latent_images_32/
 latent_images/
 voxel_data_*/
@@ -11,17 +12,11 @@ triplane_images_*/
 voxels/
 clip_images/
 metrics/
-*.png
-.env
-*.ply
-*.npy
-*.pth
-haha.py
+# haha.py
 # new.py
-view.py
+# view.py
 z_vae.py
 colored_voxels/
 aeroplane_triplanes/
 assets/
 text/*.csv
-binvox_rw.py
