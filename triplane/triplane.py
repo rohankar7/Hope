@@ -2,9 +2,11 @@ import numpy as np
 import trimesh
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ShapeNetCore import *
 from Model_List import model_paths
-import os
 import config
 from tqdm import tqdm
 
@@ -115,8 +117,10 @@ def generate_triplanes(file_path, resolution=triplane_resolution):
     return triplane
 
 def model_to_triplanes():
+    os.makedirs('./data', exist_ok=True)
+    os.makedirs('./data/triplanes', exist_ok=True)
     os.makedirs(config.triplane_dir, exist_ok=True)
-    for path in tqdm(sorted(get_random_models()[:]), desc=f"Progress"):
+    for path in tqdm(sorted(get_random_models()[:1]), desc=f"Progress"):
         file_name = '_'.join(path.split('/')) + '.npy'
         # if file_name in os.listdir(config.triplane_dir):
         #     continue

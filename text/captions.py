@@ -29,7 +29,7 @@ def main():
     }
     df = pd.read_csv(config.descriptions_dir)
     # for path in model_paths:
-    for path in get_random_models()[:]:
+    for path in get_random_models()[:1]:
         sub_dirs = path.split('/')
         c, s = None, None
         if len(sub_dirs) == 4:
@@ -53,6 +53,7 @@ def main():
         ShapeNetCoreDescriptions['Caption'].append(caption)
 
     caption_df = pd.DataFrame(ShapeNetCoreDescriptions)
+    os.makedirs('./test/datasets', exist_ok=True)
     caption_df.to_csv(config.captions_dir, index=False)
 
 if __name__ == '__main__':

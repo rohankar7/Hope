@@ -46,6 +46,7 @@ def main():
     load_dotenv()
     client = OpenAI(api_key=os.getenv('OPENAI_API'))
     df['Embedding'] = df['Caption'].apply(lambda x: get_embedding(x, client))
+    os.makedirs('./text/datasets', exist_ok=True)
     df.to_csv(config.embeddings_dir, index=False)
     # viz_tsne(embedding_dir) # Visualizing the TSNE
 

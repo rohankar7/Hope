@@ -28,10 +28,12 @@ def extract_images_of_models(folder_path, output_dir):
                     inputs = processor(prompt, image, return_tensors="pt").to(device)
                     torch.cuda.empty_cache()  # Clear the cache before generating output
                     output = model.generate(**inputs, max_new_tokens=100)
-                    row = {'Class': f'{classes}', 'Subclasses': f'{models}', 'Description': f'{str(processor.decode(output[0], skip_special_tokens=True))[73:]}'}
-                    writer.writerow(row)
+                    desc = str(processor.decode(output[0], skip_special_tokens=True))[73:]
+                    writer.writerow([classes, models, desc])
                 torch.cuda.empty_cache()
 
-images_pwd = 'C:/ShapeNetCoreImages'
-output_dir = './text/descriptions.csv'
-images = extract_images_of_models(images_pwd, output_dir)
+if __name__ == "__main__":
+    images_pwd = 'C:/ShapeNetCoreImages'
+    os.makedirs("./text/datasets", exist_ok=True)
+    output_dir = './text/datasets/descriptions_haha.csv'
+    images = extract_images_of_models(images_pwd, output_dir)

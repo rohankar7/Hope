@@ -51,6 +51,7 @@ def main():
         ShapeNetCoreDescriptions['Caption'].append(caption)
 
     caption_df = pd.DataFrame(ShapeNetCoreDescriptions)
+    os.makedirs('./text/datasets', exist_ok=True)
     caption_df.to_csv(config.fused_captions_dir, index=False)
 
 if __name__ == '__main__':

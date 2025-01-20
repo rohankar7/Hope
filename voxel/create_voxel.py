@@ -1,9 +1,10 @@
 import trimesh
 import numpy as np
-import config
-from ShapeNetCore import get_random_models
-import config
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# from ShapeNetCore import get_random_models
+import config
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -43,6 +44,8 @@ def generate_colored_voxels(mesh, padded_voxels):
 
 def create_voxel_grid():
     voxel_res = config.voxel_resolution
+    os.makedirs('./data', exist_ok=True)
+    os.makedirs('./data/voxels', exist_ok=True)
     os.makedirs(config.voxel_dir, exist_ok=True)
     l = ['02691156_1a29042e20ab6f005e9e2656aff7dd5b.npy']
     # for path in tqdm(sorted(os.listdir(config.triplane_dir)[:]), desc='Progress'):
@@ -63,7 +66,7 @@ def create_voxel_grid():
             if config.voxel_type == 'color':
                 padded_voxels = generate_colored_voxels(mesh, padded_voxels)
             visualize_voxel(padded_voxels) # Uncommenting this will display the generated voxels
-            # np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
+            np.save(f'{config.voxel_dir}/{file_name}', padded_voxels)
         except (IndexError, AttributeError, np.core._exceptions._ArrayMemoryError) as e:
             continue
 

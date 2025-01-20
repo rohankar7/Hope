@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-file_path = 'C:/Project/GPTImages'
+file_path = 'C:/Project/GPTImages' # Path for the descriptions of the 3D models
 
 ShapeNetCoreDescriptions = {
     'Class': [],
@@ -23,9 +23,10 @@ for classes in os.listdir(file_path):
                 ShapeNetCoreDescriptions['Subclass'].append(descriptions[i].split(':')[0])
             else:
                 ShapeNetCoreDescriptions['Description'].append(str(descriptions[i][0:-1][76:].split('\n')[0]))
-print(len(ShapeNetCoreDescriptions['Class']))
-print(len(ShapeNetCoreDescriptions['Subclass']))
-print(len(ShapeNetCoreDescriptions['Description']))
+# print(len(ShapeNetCoreDescriptions['Class']))
+# print(len(ShapeNetCoreDescriptions['Subclass']))
+# print(len(ShapeNetCoreDescriptions['Description']))
 
 df = pd.DataFrame(ShapeNetCoreDescriptions)
-df.to_csv("./text/descriptions.csv", index=False)
+os.makedirs("./datasets", exist_ok=True)
+df.to_csv("./datasets/descriptions.csv", index=False)
