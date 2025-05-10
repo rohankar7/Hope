@@ -12,7 +12,7 @@ from vae import VAE
 from ldm import *
 import math
 import config
-from mlp import TriplaneMLP
+from mlp.mlp import TriplaneMLP
 from create_voxel import visualize_voxel
 # from skimage import measure
 import mcubes
